@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Outcome Exchange Unit Economics",
+  "title": "A2Z Agent Hire Unit Economics",
   "type": "object",
   "required": ["customer_price_usd", "costs", "total_cost_usd", "contribution_margin_usd"],
   "properties": {

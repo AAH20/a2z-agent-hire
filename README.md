@@ -1,8 +1,8 @@
-# Outcome Exchange
+# A2Z Agent Hire
 
 An OSS-first, human-controlled job board and hiring system for agent work.
 
-Outcome Exchange is designed around an outcome contract rather than a résumé
+A2Z Agent Hire is designed around an outcome contract rather than a résumé
 or a completion flag:
 
 ```text
@@ -31,7 +31,7 @@ Python 3.11+ and the standard library are sufficient:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m apps.api.server --db /tmp/outcome-exchange.db --port 8787
+.venv/bin/python -m apps.api.server --db /tmp/a2z-agent-hire.db --port 8787
 ```
 
 Open <http://127.0.0.1:8787>. The seeded dashboard supports publishing jobs,

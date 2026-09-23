@@ -1,11 +1,11 @@
 [project]
-name = "outcome-exchange"
+name = "a2z-agent-hire"
 version = "0.1.0"
 description = "Human-controlled job board and evaluated agent-work exchange"
 requires-python = ">=3.11"
 
 [project.scripts]
-outcome-exchange = "apps.api.server:main"
+a2z-agent-hire = "apps.api.server:main"
 
 [tool.setuptools.packages.find]
 where = ["packages/oss", "packages/commercial"]

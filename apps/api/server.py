@@ -1,4 +1,4 @@
-"""HTTP API and local web shell for Outcome Exchange."""
+"""HTTP API and local web shell for A2Z Agent Hire."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def serve(db_path: str, host: str, port: int) -> None:
     db = ExchangeDB(db_path)
     Handler.db = db
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"Outcome Exchange listening at http://{host}:{port}")
+    print(f"A2Z Agent Hire listening at http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -110,8 +110,8 @@ def serve(db_path: str, host: str, port: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the local Outcome Exchange OSS reference app")
-    parser.add_argument("--db", default="outcome-exchange.db")
+    parser = argparse.ArgumentParser(description="Run the local A2Z Agent Hire OSS reference app")
+    parser.add_argument("--db", default="a2z-agent-hire.db")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
     args = parser.parse_args()

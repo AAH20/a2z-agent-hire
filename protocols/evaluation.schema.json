@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Outcome Exchange Evaluation",
+  "title": "A2Z Agent Hire Evaluation",
   "type": "object",
   "required": ["first_pass_acceptance", "evidence_completeness", "rework_rate", "cost_per_accepted_outcome_usd"],
   "properties": {
