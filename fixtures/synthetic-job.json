@@ -1,0 +1,7 @@
+{
+  "evidence_class": "SYNTHETIC",
+  "job_id": "JOB-DEMO-001",
+  "claim": "A completed swarm task is an accepted outcome.",
+  "expected_result": "UNRESOLVED until human acceptance and all evidence are present.",
+  "limitations": ["All values are invented.", "The replay is not live multi-agent execution.", "No production hiring or payment decision is made."]
+}

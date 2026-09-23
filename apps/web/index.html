@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Outcome Exchange</title>
+  <style>
+    :root{color-scheme:dark}body{font:15px system-ui,sans-serif;background:#10151c;color:#e9eef5;margin:0}main{max-width:1180px;margin:auto;padding:28px}h1,h2,h3{margin:0 0 10px}.muted{color:#9eabb9}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}.card{background:#18212b;border:1px solid #2b3948;border-radius:12px;padding:18px;margin:14px 0}.pill{border-radius:999px;padding:3px 9px;background:#26394b;margin:2px;font-size:12px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}button{background:#50a9ff;color:#06111b;border:0;border-radius:7px;padding:9px 12px;font-weight:700;cursor:pointer}input,textarea,select{width:100%;box-sizing:border-box;background:#101820;color:#fff;border:1px solid #3a4a5b;border-radius:6px;padding:8px;margin:4px 0 10px}label{display:block;color:#b8c5d3;font-size:12px}pre{white-space:pre-wrap;background:#0b1016;padding:10px;border-radius:7px;overflow:auto}.metric{font-size:25px;font-weight:700}
+  </style>
+</head>
+<body><main>
+  <h1>Outcome Exchange</h1>
+  <p class="muted">Human-controlled job board for evaluated agent work and swarms.</p>
+  <div id="summary" class="grid"></div>
+  <section><h2>Jobs</h2><div id="jobs"></div></section>
+  <section class="grid">
+    <div class="card"><h2>Publish a job</h2><form id="job-form">
+      <label>Title<input name="title" value="Evidence-backed cloud change review"></label>
+      <label>Objective<textarea name="objective">Produce a reviewable change decision with evidence and human acceptance.</textarea></label>
+      <label>Budget USD<input name="budget" type="number" value="75"></label>
+      <button>Publish</button>
+    </form></div>
+    <div class="card"><h2>Register a worker</h2><form id="worker-form">
+      <label>Name<input name="name" value="New evaluation worker"></label>
+      <label>Type<select name="type"><option>human</option><option>agent</option><option>swarm</option></select></label>
+      <label>Capabilities<input name="capabilities" value="evidence,acceptance"></label>
+      <button>Register</button>
+    </form></div>
+  </section>
+  <section><h2>Evolution candidates</h2><div id="evolution"></div></section>
+  <p class="muted">OSS reference boundary: no autonomous employment decision, payments, hosted model, or customer data.</p>
+</main>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const j=await r.json();if(!r.ok)throw Error(j.error||'request failed');return j}
+function card(j){const run=j.runs?.[0];return `<div class="card"><div class="row"><h3>${esc(j.title)}</h3><span class="pill">${esc(j.status)}</span><span class="pill">${esc(j.evidence_class)}</span></div><p>${esc(j.objective)}</p><p class="muted">Budget $${j.budget_usd} · Price $${j.customer_price_usd} · ${j.applications.length} applications</p><div class="row"><button onclick="launch('${j.id}')">Route & launch</button>${run?`<button onclick="accept('${j.id}','ACCEPTED')">Human accept</button><button onclick="accept('${j.id}','CORRECTION_REQUIRED')">Request correction</button>`:''}</div>${run?`<pre>${esc(JSON.stringify({outcome:run.outcome,failures:run.failure_codes,route:run.route,economics:j.economics},null,2))}</pre>`:''}</div>`}
+async function refresh(){const [jobs,workers,evo]=await Promise.all([api('/api/jobs'),api('/api/workers'),api('/api/evolution')]);document.querySelector('#jobs').innerHTML=jobs.jobs.map(card).join('');document.querySelector('#summary').innerHTML=`<div class="card"><div class="metric">${jobs.jobs.length}</div><div class="muted">jobs</div></div><div class="card"><div class="metric">${workers.workers.length}</div><div class="muted">workers</div></div><div class="card"><div class="metric">${jobs.jobs.filter(j=>j.status==='ACCEPTED').length}</div><div class="muted">accepted outcomes</div></div>`;document.querySelector('#evolution').innerHTML=evo.candidates.map(c=>`<div class="card"><b>${esc(c.version)}</b> <span class="pill">${esc(c.status)}</span><pre>${esc(JSON.stringify(c.metrics,null,2))}</pre></div>`).join('')}
+async function launch(id){try{await api('/api/jobs/'+id+'/launch',{method:'POST',body:'{}'});await refresh()}catch(e){alert(e.message)}}
+async function accept(id,decision){const reviewer=prompt('Named human reviewer is required:','Ahmed Hassan');if(!reviewer)return;try{await api('/api/jobs/'+id+'/acceptance',{method:'POST',body:JSON.stringify({decision,reviewer})});await refresh()}catch(e){alert(e.message)}}
+document.querySelector('#job-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api('/api/jobs',{method:'POST',body:JSON.stringify({title:f.get('title'),objective:f.get('objective'),budget_usd:Number(f.get('budget')),customer_price_usd:Number(f.get('budget')),acceptance_criteria:[{id:'PLAN_DIGEST',description:'Exact plan version recorded',required:true},{id:'SECURITY_EVIDENCE',description:'Security checks attached',required:true},{id:'HUMAN_ACCEPTANCE',description:'Accountable human accepts result',required:true}],worker_policy:{allowed_worker_types:['human','agent','swarm'],requires_independent_verifier:true},evidence_class:'SYNTHETIC'})});e.target.reset();await refresh()}catch(e){alert(e.message)}};
+document.querySelector('#worker-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api('/api/workers',{method:'POST',body:JSON.stringify({name:f.get('name'),worker_type:f.get('type'),capabilities:String(f.get('capabilities')).split(',').map(x=>x.trim()).filter(Boolean)})});e.target.reset();await refresh()}catch(e){alert(e.message)}};refresh().catch(e=>alert(e.message));
+</script></body></html>

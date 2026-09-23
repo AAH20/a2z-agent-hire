@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Outcome Exchange Unit Economics",
+  "type": "object",
+  "required": ["customer_price_usd", "costs", "total_cost_usd", "contribution_margin_usd"],
+  "properties": {
+    "customer_price_usd": {"type": "number", "minimum": 0},
+    "costs": {"type": "object"},
+    "total_cost_usd": {"type": "number", "minimum": 0},
+    "contribution_margin_usd": {"type": "number"}
+  }
+}
