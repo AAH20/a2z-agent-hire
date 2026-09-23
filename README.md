@@ -1,29 +1,25 @@
 # A2Z Agent Hire
 
-An OSS-first, human-controlled job board and hiring system for agent work.
+A local-first, inspectable job-and-outcome contract for **human-controlled agent work**. It gives a buyer a way to state the job, review worker applications, select one worker, require evidence, record human acceptance, and inspect estimated unit economics. The included replay and data are synthetic; this is a reference implementation, not a live hiring marketplace.
 
-A2Z Agent Hire is designed around an outcome contract rather than a résumé
-or a completion flag:
+The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with eleven GitHub-compatible Mermaid diagrams covering the workflow, state machine, data and evidence model, routing, economics, hosted target, trust zones, and links to the wider A2Z ecosystem.
 
-```text
-job contract → worker applications → human selection
-→ typed routing → replayable swarm → independent evaluation
-→ human acceptance → evidence + unit economics
+## Why this exists
+
+Agent marketplaces often count task completion as success. A2Z Agent Hire makes an explicit distinction:
+
+```mermaid
+flowchart LR
+  Job[Job contract] --> Apply[Worker application]
+  Apply --> Select[Named human selection]
+  Select --> Replay[Synthetic replay]
+  Replay --> Evidence[Declared evidence digest]
+  Evidence --> Accept[Named human acceptance]
+  Accept --> Outcome[Accepted or unresolved]
+  Outcome --> Economics[Estimated economics]
 ```
 
-The repository is a monorepo with an explicit boundary:
-
-| OSS layer | Commercial layer |
-| --- | --- |
-| Job/evaluation/economics schemas | Tenant isolation and hosted control plane |
-| Local SQLite reference runtime | Enterprise identity, SSO, and approvals |
-| Human-controlled hiring workflow | Payments, escrow, tax, and fraud services |
-| Replayable swarm contracts | Private evaluation packs and benchmark data |
-| Synthetic fixtures and tests | Managed connectors, support, and contractual SLAs |
-
-The OSS runtime is complete enough to demonstrate the local workflow. It does
-not process money, make autonomous employment decisions, use protected traits,
-call a hosted model, or claim production hiring performance.
+The reference refuses to launch without selection and keeps a run unresolved when required evidence is missing. It records who declared a digest but does **not** verify the source artifact or the claimed identity. That distinction is central to the design.
 
 ## Run locally
 
@@ -34,33 +30,60 @@ python3 -m venv .venv
 .venv/bin/python -m apps.api.server --db /tmp/a2z-agent-hire.db --port 8787
 ```
 
-Open <http://127.0.0.1:8787>. The seeded dashboard supports publishing jobs,
-registering human/agent/swarm workers, applications, named human selection,
-typed routing, swarm replay, acceptance/correction, evolution candidates, and
-unit-economics inspection.
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The server binds loopback only because it has no authentication. The dashboard lets you create jobs, register worker records, submit applications, select a worker, replay a run, record operator-declared evidence digests, make an acceptance decision, and inspect economics. It is a single-operator local demo, not an internet service.
 
-Run the tests:
+Run checks:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
+### Reproduce an accepted synthetic outcome
+
+1. On the seeded job, apply the `swarm-review-team` worker.
+2. Select its application using a named human reviewer.
+3. Route and replay the job. The new run begins `UNRESOLVED`.
+4. Record separate 64-character lowercase SHA-256 digest strings for `PLAN_DIGEST` and `SECURITY_EVIDENCE`, naming a verifier other than `swarm-review-team`.
+5. Record a named human acceptance. The local record becomes `ACCEPTED`.
+
+These steps show **contract enforcement only**. Entering a made-up digest can satisfy the local reference. No claim about a real plan, security review, worker identity, or accepted customer work follows from this demo.
+
+## What is implemented
+
+| Module | Role | Boundary |
+| --- | --- | --- |
+| `packages/oss/outcome_exchange/core.py` | SQLite contracts, hiring states, synthetic run, evidence declarations, economics, evolution gate | No authentication, artifact bytes, model execution, or transactions |
+| `apps/api/server.py` | Loopback HTTP API | No multi-user authorization |
+| `apps/web/index.html` | Local dashboard | No production account or payment UI |
+| `packages/oss/outcome_exchange/failure_clinic.py` | Synthetic three-verdict postcondition check | No provider connection |
+| `protocols/` | Published JSON shapes | Not yet a fully enforced schema boundary |
+| `fixtures/` and `tests/` | Synthetic and unit-level reproducibility | No customer performance claims |
+| `packages/commercial/` | Written interface boundary | No hosted commercial service here |
+
+The routing decision is **Laya/Jev-compatible in shape**. Neither model is bundled or called. The “swarm” is a replayable task graph, not a running group of agents. The unit-economics example uses $75 price and $61.50 estimated variable cost to illustrate $13.50 contribution (18%); it is not measured revenue.
+
+## Architecture and delivery map
+
+The detailed [architecture](docs/ARCHITECTURE.md) covers:
+
+- current data flow, explicit human authority, reachable job states, and logical provenance;
+- failure semantics, including missing evidence and cloud timeouts;
+- exact metric denominators and cost formulas;
+- proposed OSS adapters and a separate commercial control plane;
+- production trust zones, phased release gates, and unsolved failure modes.
+
+The order of work is: harden versioned contracts and immutable attempts; add bounded executor adapters; verify artifact bytes and reviewer identity; test one consented paid job family with actual costs; then consider multi-tenant hosting and settlement. A marketplace, viral growth, or profitability is not implied by the local reference.
+
 ## Agent Failure Clinic: cloud timeout
 
-`fixtures/agent-failure-clinic-cloud-timeout.json` defines a synthetic
-Terraform-like timeout case. The verifier reads a provider-owned postcondition
-and receipt using one stable `intent_id`; it never treats the executor's local
-success signal as proof. The test distinguishes `COMMITTED`, `NOT_COMMITTED`,
-and `UNRESOLVED`, including local/provider divergence. Run the command above
-to reproduce it locally.
+`fixtures/agent-failure-clinic-cloud-timeout.json` defines a synthetic Terraform-like timeout. The verifier reads a provider-owned postcondition and receipt under one stable `intent_id`; it does not treat an executor's local success signal as proof. Tests distinguish `COMMITTED`, `NOT_COMMITTED`, and `UNRESOLVED`, including local/provider divergence.
 
-## Honest implementation boundary
+## OSS and commercial boundary
 
-The local router is **Laya/Jev-compatible by decision shape**, not a bundled
-Laya model. The swarm engine replays declared task stages; it does not spawn
-agents or run tools. The hiring flow requires a named human reviewer for
-shortlisting, selection, rejection, and outcome acceptance.
+The public layer should retain portable job, application, run, evidence, evaluation, and economics semantics, plus conformance tests and synthetic fixtures. A commercial operator may add authenticated tenant isolation, hosted workflows, attested verification, private evaluation packs, enterprise integrations, payment-provider settlement, support, and SLAs. Those are **target capabilities**, not shipped services.
 
-All seeded values are synthetic. A passing test proves local code behavior,
-not customer outcomes, marketplace liquidity, fairness, certification,
-commercial viability, or production readiness.
+Do not commit customer records, protected employment attributes, payment secrets, private benchmarks, negotiated rates, or credentials. Real employment-impacting, physical-world, biometric, and surveillance tasks require separate legal, safety, fairness, and domain review before deployment.
+
+## Claim limits
+
+A passing test proves behavior of the local code. It does not prove customer outcomes, worker capability, real-world verifier independence, fairness, certification, marketplace liquidity, production readiness, or commercial viability. All seeded worker scores and monetary values are synthetic.

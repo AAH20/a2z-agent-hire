@@ -1,6 +1,7 @@
 import unittest
+import math
 
-from packages.oss.outcome_exchange.core import ExchangeDB
+from packages.oss.outcome_exchange.core import ExchangeDB, as_money
 from packages.oss.outcome_exchange.failure_clinic import (
     COMMITTED,
     NOT_COMMITTED,
@@ -69,10 +70,41 @@ class ExchangeCoreTests(unittest.TestCase):
         self.assertEqual(selected["status"], "IN_PROGRESS")
         launched = db.launch(job_id)
         self.assertEqual(launched["runs"][0]["outcome"], "UNRESOLVED")
+        self.assertEqual(launched["runs"][0]["observed_evidence"], [])
         accepted = db.accept(job_id, "ACCEPTED", "accountable-owner")
         self.assertEqual(accepted["status"], "IN_REVIEW")
         self.assertEqual(accepted["runs"][0]["failure_codes"], ["REQUIRED_EVIDENCE_GAP"])
         self.assertEqual(db.economics(job_id)["contribution_margin_usd"], 13.5)
+        db.close()
+
+    def test_explicit_evidence_and_named_acceptance_can_finish_a_run(self):
+        db = ExchangeDB()
+        job_id = db.jobs()[0]["id"]
+        worker = next(item for item in db.workers() if item["worker_type"] == "swarm")
+        application = db.apply(job_id, {"worker_id": worker["id"], "proposal": "review", "bid_usd": 28})
+        db.decide_application(application["id"], "SELECTED", "human-selector")
+        run = db.launch(job_id)["runs"][0]
+        for criterion in ("PLAN_DIGEST", "SECURITY_EVIDENCE"):
+            with self.assertRaises(ValueError):
+                db.record_evidence(run["id"], criterion, worker["id"], "a" * 64)
+            db.record_evidence(run["id"], criterion, "independent-reviewer", "a" * 64)
+        accepted = db.accept(job_id, "ACCEPTED", "accountable-owner")
+        self.assertEqual(accepted["status"], "ACCEPTED")
+        self.assertEqual(accepted["runs"][0]["outcome"], "ACCEPTED")
+        self.assertEqual(len(accepted["runs"][0]["observed_evidence"]), 2)
+        with self.assertRaises(ValueError):
+            db.accept(job_id, "ACCEPTED", "accountable-owner")
+        db.close()
+
+    def test_launch_requires_human_selection_and_single_route_is_normalized(self):
+        db = ExchangeDB()
+        job_id = db.jobs()[0]["id"]
+        with self.assertRaises(ValueError):
+            db.launch(job_id)
+        one = db.create_job({"title": "Human task", "objective": "Review fixture", "budget_usd": 10,
+                             "acceptance_criteria": [{"id": "HUMAN_ACCEPTANCE", "required": True}],
+                             "worker_policy": {"allowed_worker_types": ["human"]}})
+        self.assertEqual(db.route(one["id"])["probabilities"], {"human": 1.0})
         db.close()
 
     def test_evolution_requires_holdout_and_gates(self):
@@ -85,6 +117,36 @@ class ExchangeCoreTests(unittest.TestCase):
         db = ExchangeDB(); job_id = db.jobs()[0]["id"]; worker = db.workers()[0]
         app = db.apply(job_id, {"worker_id": worker["id"], "proposal": "proposal", "bid_usd": 10})
         with self.assertRaises(ValueError): db.decide_application(app["id"], "SELECTED", "")
+        db.close()
+
+    def test_job_list_has_dashboard_details_and_single_selection(self):
+        db = ExchangeDB()
+        job_id = db.jobs()[0]["id"]
+        workers = db.workers()[:2]
+        apps = [db.apply(job_id, {"worker_id": worker["id"], "proposal": "review", "bid_usd": 10})
+                for worker in workers]
+        self.assertEqual(len(db.jobs()[0]["applications"]), 2)
+        selected = db.decide_application(apps[0]["id"], "SELECTED", "human-selector")
+        selected_worker = next(item for item in selected["applications"] if item["status"] == "SELECTED")
+        self.assertEqual(db.route(job_id)["selected"], selected_worker["worker_type"])
+        with self.assertRaises(ValueError):
+            db.decide_application(apps[1]["id"], "SELECTED", "second-selector")
+        with self.assertRaises(ValueError):
+            db.apply(job_id, {"worker_id": workers[1]["id"], "proposal": "late", "bid_usd": 10})
+        db.close()
+
+    def test_invalid_money_and_disallowed_worker_are_rejected(self):
+        for value in (math.nan, math.inf, -1):
+            with self.assertRaises(ValueError):
+                as_money(value)
+        db = ExchangeDB()
+        job = db.create_job({"title": "Human review", "objective": "Review",
+                             "budget_usd": 10,
+                             "acceptance_criteria": [{"id": "HUMAN_ACCEPTANCE", "required": True}],
+                             "worker_policy": {"allowed_worker_types": ["human"]}})
+        agent = next(item for item in db.workers() if item["worker_type"] == "agent")
+        with self.assertRaises(ValueError):
+            db.apply(job["id"], {"worker_id": agent["id"], "bid_usd": 10})
         db.close()
 
 

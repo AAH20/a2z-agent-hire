@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -16,8 +18,8 @@ def utc_now() -> str:
 
 def as_money(value: Any) -> float:
     result = round(float(value), 2)
-    if result < 0:
-        raise ValueError("money values must be nonnegative")
+    if not math.isfinite(result) or result < 0:
+        raise ValueError("money values must be finite and nonnegative")
     return result
 
 
@@ -108,6 +110,8 @@ class ExchangeDB:
             raise ValueError("worker_policy.allowed_worker_types is required")
         if any(item not in {"human", "agent", "swarm"} for item in policy["allowed_worker_types"]):
             raise ValueError("unsupported worker type")
+        if len(policy["allowed_worker_types"]) != len(set(policy["allowed_worker_types"])):
+            raise ValueError("allowed worker types must be unique")
         ids = [str(item.get("id", "")) for item in criteria]
         if any(not item for item in ids) or len(ids) != len(set(ids)):
             raise ValueError("acceptance criterion ids must be unique")
@@ -122,7 +126,8 @@ class ExchangeDB:
         return {"id": row["id"], "title": row["title"], "objective": row["objective"], "status": row["status"], "budget_usd": row["budget_usd"], "customer_price_usd": row["customer_price_usd"], "acceptance_criteria": loads(row["criteria"], []), "worker_policy": loads(row["policy"], {}), "evidence_class": row["evidence_class"], "created_at": row["created_at"], "updated_at": row["updated_at"]}
 
     def jobs(self) -> list[dict[str, Any]]:
-        return [self._job(row) for row in self.db.execute("SELECT * FROM jobs ORDER BY created_at DESC")]
+        ids = [row["id"] for row in self.db.execute("SELECT id FROM jobs ORDER BY created_at DESC")]
+        return [self.job(job_id) for job_id in ids]
 
     def job(self, job_id: str) -> dict[str, Any]:
         row = self.db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
@@ -151,7 +156,12 @@ class ExchangeDB:
         return [self.worker(row["id"]) for row in self.db.execute("SELECT id FROM workers ORDER BY name")]
 
     def apply(self, job_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        self.job(job_id); worker_id = str(data.get("worker_id", "")); self.worker(worker_id)
+        job = self.job(job_id)
+        if job["status"] not in {"OPEN", "APPLIED"}:
+            raise ValueError("job is not accepting applications")
+        worker_id = str(data.get("worker_id", "")); worker = self.worker(worker_id)
+        if worker["worker_type"] not in job["worker_policy"]["allowed_worker_types"]:
+            raise ValueError("worker type is not allowed for this job")
         application_id = f"APP-{uuid.uuid4().hex[:10].upper()}"
         self.db.execute("INSERT INTO applications VALUES(?,?,?,?,?,?,?,?,?)", (application_id, job_id, worker_id, str(data.get("proposal", "")).strip(), as_money(data.get("bid_usd", 0)), "PENDING", None, utc_now(), utc_now()))
         self.db.execute("UPDATE jobs SET status='APPLIED', updated_at=? WHERE id=? AND status='OPEN'", (utc_now(), job_id))
@@ -166,6 +176,9 @@ class ExchangeDB:
         if status not in {"SHORTLISTED", "SELECTED", "REJECTED"} or not reviewer.strip(): raise ValueError("named human reviewer and valid decision are required")
         row = self.db.execute("SELECT * FROM applications WHERE id=?", (application_id,)).fetchone()
         if row is None: raise KeyError("application not found")
+        job = self.job(row["job_id"])
+        if job["status"] not in {"OPEN", "APPLIED"} or row["status"] not in {"PENDING", "SHORTLISTED"}:
+            raise ValueError("application is not awaiting a hiring decision")
         self.db.execute("UPDATE applications SET status=?, reviewer=?, updated_at=? WHERE id=?", (status, reviewer.strip(), utc_now(), application_id))
         if status == "SELECTED":
             self.db.execute("UPDATE applications SET status='REJECTED', reviewer=?, updated_at=? WHERE job_id=? AND id<>? AND status IN('PENDING','SHORTLISTED')", (reviewer.strip(), utc_now(), row["job_id"], application_id))
@@ -174,26 +187,69 @@ class ExchangeDB:
 
     def route(self, job_id: str) -> dict[str, Any]:
         job = self.job(job_id); preferred = "swarm" if job["worker_policy"].get("requires_independent_verifier") and len(job["acceptance_criteria"]) >= 2 else "agent"
+        selected = next((item for item in job["applications"] if item["status"] == "SELECTED"), None)
+        if selected is not None:
+            preferred = selected["worker_type"]
         if preferred not in job["worker_policy"]["allowed_worker_types"]: preferred = job["worker_policy"]["allowed_worker_types"][0]
-        options = job["worker_policy"]["allowed_worker_types"]; probabilities = {item: (0.65 if item == preferred else round(0.35 / max(len(options) - 1, 1), 4)) for item in options}
+        options = job["worker_policy"]["allowed_worker_types"]
+        probabilities = ({options[0]: 1.0} if len(options) == 1 else
+                         {item: (0.65 if item == preferred else round(0.35 / (len(options) - 1), 4)) for item in options})
         return {"model": "laya-compatible-local-router", "type": "choice", "selected": preferred, "options": options, "probabilities": probabilities, "human_approval_required": True}
 
     def launch(self, job_id: str) -> dict[str, Any]:
-        job = self.job(job_id); decision = self.route(job_id); run_id = f"RUN-{uuid.uuid4().hex[:10].upper()}"
+        job = self.job(job_id)
+        selected = self.db.execute("SELECT 1 FROM applications WHERE job_id=? AND status='SELECTED' LIMIT 1", (job_id,)).fetchone()
+        if selected is None or job["status"] != "IN_PROGRESS":
+            raise ValueError("a named human must select an application before launch")
+        decision = self.route(job_id); run_id = f"RUN-{uuid.uuid4().hex[:10].upper()}"
         tasks = [{"id": name, "status": "COMPLETED", "evidence": []} for name in ("intake", "execution", "independent-verifier")]
-        evidence = [item["id"] for item in job["acceptance_criteria"] if item["id"] != "HUMAN_ACCEPTANCE"]
-        self.db.execute("INSERT INTO runs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (run_id, job_id, decision["selected"], dumps(decision), dumps(tasks), dumps(evidence), "NOT_RECORDED", "UNRESOLVED", dumps(["HUMAN_ACCEPTANCE_NOT_ESTABLISHED", "REQUIRED_EVIDENCE_GAP"]), 184, 12.0, utc_now(), utc_now()))
+        self.db.execute("INSERT INTO runs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (run_id, job_id, decision["selected"], dumps(decision), dumps(tasks), dumps([]), "NOT_RECORDED", "UNRESOLVED", dumps(["HUMAN_ACCEPTANCE_NOT_ESTABLISHED", "REQUIRED_EVIDENCE_GAP"]), 184, 12.0, utc_now(), utc_now()))
         self.db.execute("UPDATE jobs SET status='IN_REVIEW', updated_at=? WHERE id=?", (utc_now(), job_id)); self._event("SWARM_RUN_LAUNCHED", run_id, {"route": decision["selected"]}); self.db.commit(); return self.job(job_id)
+
+    def record_evidence(self, run_id: str, criterion_id: str, verifier: str, artifact_sha256: str) -> dict[str, Any]:
+        """Record a declared artifact digest; the local runtime does not authenticate its source."""
+        row = self.db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        if row is None:
+            raise KeyError("run not found")
+        job = self.job(row["job_id"])
+        if job["status"] != "IN_REVIEW":
+            raise ValueError("evidence can be recorded only during review")
+        valid = {item["id"] for item in job["acceptance_criteria"] if item["id"] != "HUMAN_ACCEPTANCE"}
+        if criterion_id not in valid:
+            raise ValueError("criterion is not an evidence criterion in this job")
+        verifier = verifier.strip()
+        if not verifier or not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256):
+            raise ValueError("named verifier and lowercase SHA-256 digest are required")
+        selected = self.db.execute("SELECT worker_id FROM applications WHERE job_id=? AND status='SELECTED' LIMIT 1", (row["job_id"],)).fetchone()
+        if job["worker_policy"].get("requires_independent_verifier") and selected and verifier == selected["worker_id"]:
+            raise ValueError("selected worker cannot self-verify this job")
+        evidence = loads(row["evidence"], [])
+        if any(item.get("criterion_id") == criterion_id for item in evidence if isinstance(item, dict)):
+            raise ValueError("criterion evidence is already recorded")
+        evidence.append({"criterion_id": criterion_id, "verifier": verifier, "artifact_sha256": artifact_sha256,
+                         "recorded_at": utc_now(), "source_class": "OPERATOR_DECLARED"})
+        self.db.execute("UPDATE runs SET evidence=?, updated_at=? WHERE id=?", (dumps(evidence), utc_now(), run_id))
+        self._event("EVIDENCE_RECORDED", run_id, {"criterion_id": criterion_id, "artifact_sha256": artifact_sha256,
+                                                   "verifier": verifier, "source_class": "OPERATOR_DECLARED"})
+        self.db.commit()
+        return self.job(row["job_id"])
 
     def accept(self, job_id: str, decision: str, reviewer: str) -> dict[str, Any]:
         if decision not in {"ACCEPTED", "REJECTED", "CORRECTION_REQUIRED"} or not reviewer.strip(): raise ValueError("named reviewer and valid acceptance decision are required")
         row = self.db.execute("SELECT * FROM runs WHERE job_id=? ORDER BY created_at DESC LIMIT 1", (job_id,)).fetchone()
         if row is None: raise ValueError("launch a run first")
-        outcome = "ACCEPTED" if decision == "ACCEPTED" and "HUMAN_ACCEPTANCE" in loads(row["evidence"], []) else "UNRESOLVED"
-        failures = [] if outcome == "ACCEPTED" else ["REQUIRED_EVIDENCE_GAP"] if decision == "ACCEPTED" else ["HUMAN_ACCEPTANCE_NOT_ESTABLISHED"]
+        job = self.job(job_id)
+        if job["status"] != "IN_REVIEW":
+            raise ValueError("job is not awaiting acceptance")
+        required = {item["id"] for item in job["acceptance_criteria"]
+                    if item.get("required", True) and item["id"] != "HUMAN_ACCEPTANCE"}
+        observed = {item.get("criterion_id") for item in loads(row["evidence"], []) if isinstance(item, dict)}
+        missing = sorted(required - observed)
+        outcome = "ACCEPTED" if decision == "ACCEPTED" and not missing else "UNRESOLVED"
+        failures = [] if outcome == "ACCEPTED" else (["REQUIRED_EVIDENCE_GAP"] if missing else ["HUMAN_ACCEPTANCE_NOT_ESTABLISHED"])
         status = "ACCEPTED" if outcome == "ACCEPTED" else "UNRESOLVED" if decision == "REJECTED" else "IN_REVIEW"
         self.db.execute("UPDATE runs SET acceptance=?, outcome=?, failures=?, updated_at=? WHERE id=?", (decision, outcome, dumps(failures), utc_now(), row["id"]))
-        self.db.execute("UPDATE jobs SET status=?, updated_at=? WHERE id=?", (status, utc_now(), job_id)); self._event("HUMAN_ACCEPTANCE_RECORDED", row["id"], {"decision": decision, "reviewer": reviewer.strip()}); self.db.commit(); return self.job(job_id)
+        self.db.execute("UPDATE jobs SET status=?, updated_at=? WHERE id=?", (status, utc_now(), job_id)); self._event("HUMAN_ACCEPTANCE_RECORDED", row["id"], {"decision": decision, "reviewer": reviewer.strip(), "missing_criteria": missing}); self.db.commit(); return self.job(job_id)
 
     def _run(self, row: sqlite3.Row) -> dict[str, Any]:
         return {"id": row["id"], "route": row["route"], "decision": loads(row["decision"], {}), "tasks": loads(row["tasks"], []), "observed_evidence": loads(row["evidence"], []), "human_acceptance": row["acceptance"], "outcome": row["outcome"], "failure_codes": loads(row["failures"], []), "elapsed_seconds": row["elapsed_seconds"], "rework_cost_usd": row["rework_cost_usd"], "created_at": row["created_at"]}

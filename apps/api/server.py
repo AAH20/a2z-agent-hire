@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -31,6 +31,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def read_body(self) -> dict:
         size = int(self.headers.get("Content-Length", "0"))
+        if size < 0 or size > 1_048_576:
+            raise ValueError("request body exceeds local API limit")
         value = json.loads(self.rfile.read(size) if size else b"{}")
         if not isinstance(value, dict):
             raise ValueError("request body must be an object")
@@ -81,6 +83,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, self.db.launch(path.split("/")[3]))
             elif path.startswith("/api/jobs/") and path.endswith("/acceptance"):
                 self.send_json(200, self.db.accept(path.split("/")[3], str(data.get("decision", "")), str(data.get("reviewer", ""))))
+            elif path.startswith("/api/runs/") and path.endswith("/evidence"):
+                self.send_json(200, self.db.record_evidence(path.split("/")[3], str(data.get("criterion_id", "")),
+                                                             str(data.get("verifier", "")), str(data.get("artifact_sha256", ""))))
             elif path.startswith("/api/applications/") and path.endswith("/decision"):
                 application_id = path.split("/")[3]
                 row = self.db.db.execute("SELECT job_id FROM applications WHERE id=?", (application_id,)).fetchone()
@@ -96,9 +101,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(db_path: str, host: str, port: int) -> None:
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError("reference API has no authentication; bind only to loopback")
     db = ExchangeDB(db_path)
     Handler.db = db
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = HTTPServer((host, port), Handler)
     print(f"A2Z Agent Hire listening at http://{host}:{port}")
     try:
         server.serve_forever()

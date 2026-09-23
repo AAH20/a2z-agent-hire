@@ -12,6 +12,7 @@
   <p class="muted">Human-controlled job board for evaluated agent work and swarms.</p>
   <div id="summary" class="grid"></div>
   <section><h2>Jobs</h2><div id="jobs"></div></section>
+  <section><h2>Available workers</h2><div id="workers" class="grid"></div></section>
   <section class="grid">
     <div class="card"><h2>Publish a job</h2><form id="job-form">
       <label>Title<input name="title" value="Evidence-backed cloud change review"></label>
@@ -27,15 +28,88 @@
     </form></div>
   </section>
   <section><h2>Evolution candidates</h2><div id="evolution"></div></section>
-  <p class="muted">OSS reference boundary: no autonomous employment decision, payments, hosted model, or customer data.</p>
+  <p class="muted">OSS reference boundary: replayed tasks and operator-declared evidence only; no autonomous employment decision, payments, hosted model, or customer data.</p>
 </main>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const j=await r.json();if(!r.ok)throw Error(j.error||'request failed');return j}
-function card(j){const run=j.runs?.[0];return `<div class="card"><div class="row"><h3>${esc(j.title)}</h3><span class="pill">${esc(j.status)}</span><span class="pill">${esc(j.evidence_class)}</span></div><p>${esc(j.objective)}</p><p class="muted">Budget $${j.budget_usd} · Price $${j.customer_price_usd} · ${j.applications.length} applications</p><div class="row"><button onclick="launch('${j.id}')">Route & launch</button>${run?`<button onclick="accept('${j.id}','ACCEPTED')">Human accept</button><button onclick="accept('${j.id}','CORRECTION_REQUIRED')">Request correction</button>`:''}</div>${run?`<pre>${esc(JSON.stringify({outcome:run.outcome,failures:run.failure_codes,route:run.route,economics:j.economics},null,2))}</pre>`:''}</div>`}
-async function refresh(){const [jobs,workers,evo]=await Promise.all([api('/api/jobs'),api('/api/workers'),api('/api/evolution')]);document.querySelector('#jobs').innerHTML=jobs.jobs.map(card).join('');document.querySelector('#summary').innerHTML=`<div class="card"><div class="metric">${jobs.jobs.length}</div><div class="muted">jobs</div></div><div class="card"><div class="metric">${workers.workers.length}</div><div class="muted">workers</div></div><div class="card"><div class="metric">${jobs.jobs.filter(j=>j.status==='ACCEPTED').length}</div><div class="muted">accepted outcomes</div></div>`;document.querySelector('#evolution').innerHTML=evo.candidates.map(c=>`<div class="card"><b>${esc(c.version)}</b> <span class="pill">${esc(c.status)}</span><pre>${esc(JSON.stringify(c.metrics,null,2))}</pre></div>`).join('')}
-async function launch(id){try{await api('/api/jobs/'+id+'/launch',{method:'POST',body:'{}'});await refresh()}catch(e){alert(e.message)}}
-async function accept(id,decision){const reviewer=prompt('Named human reviewer is required:','Ahmed Hassan');if(!reviewer)return;try{await api('/api/jobs/'+id+'/acceptance',{method:'POST',body:JSON.stringify({decision,reviewer})});await refresh()}catch(e){alert(e.message)}}
-document.querySelector('#job-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api('/api/jobs',{method:'POST',body:JSON.stringify({title:f.get('title'),objective:f.get('objective'),budget_usd:Number(f.get('budget')),customer_price_usd:Number(f.get('budget')),acceptance_criteria:[{id:'PLAN_DIGEST',description:'Exact plan version recorded',required:true},{id:'SECURITY_EVIDENCE',description:'Security checks attached',required:true},{id:'HUMAN_ACCEPTANCE',description:'Accountable human accepts result',required:true}],worker_policy:{allowed_worker_types:['human','agent','swarm'],requires_independent_verifier:true},evidence_class:'SYNTHETIC'})});e.target.reset();await refresh()}catch(e){alert(e.message)}};
-document.querySelector('#worker-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api('/api/workers',{method:'POST',body:JSON.stringify({name:f.get('name'),worker_type:f.get('type'),capabilities:String(f.get('capabilities')).split(',').map(x=>x.trim()).filter(Boolean)})});e.target.reset();await refresh()}catch(e){alert(e.message)}};refresh().catch(e=>alert(e.message));
+async function api(path,opts={}){
+  const response=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
+  const value=await response.json();
+  if(!response.ok)throw Error(value.error||'request failed');
+  return value;
+}
+function button(label,action,id,extra={}){
+  const attributes=Object.entries(extra).map(([key,value])=>` data-${key}="${esc(value)}"`).join('');
+  return `<button data-action="${action}" data-id="${esc(id)}"${attributes}>${label}</button>`;
+}
+function card(job){
+  const run=job.runs?.[0];
+  const applications=job.applications.map(app=>`<div class="row"><span>${esc(app.worker_name)} · ${esc(app.status)} · $${esc(app.bid_usd)}</span>${['PENDING','SHORTLISTED'].includes(app.status)?button('Select','select',app.id):''}</div>`).join('');
+  const actions=[button('Apply worker','apply',job.id)];
+  if(job.status==='IN_PROGRESS')actions.push(button('Route & replay','launch',job.id));
+  if(run&&job.status==='IN_REVIEW'){
+    actions.push(button('Record evidence digest','evidence',run.id));
+    actions.push(button('Human accept','accept',job.id,{decision:'ACCEPTED'}));
+    actions.push(button('Request correction','accept',job.id,{decision:'CORRECTION_REQUIRED'}));
+  }
+  const detail=run?`<pre>${esc(JSON.stringify({outcome:run.outcome,failures:run.failure_codes,route:run.route,recorded_evidence:run.observed_evidence,economics:job.economics},null,2))}</pre>`:'';
+  return `<div class="card"><div class="row"><h3>${esc(job.title)}</h3><span class="pill">${esc(job.status)}</span><span class="pill">${esc(job.evidence_class)}</span></div><p>${esc(job.objective)}</p><p class="muted">Budget $${esc(job.budget_usd)} · Price $${esc(job.customer_price_usd)} · ${job.applications.length} applications</p><div class="row">${actions.join('')}</div><h4>Applications</h4>${applications||'<p class="muted">No applications yet.</p>'}${detail}</div>`;
+}
+async function refresh(){
+  const [jobs,workers,evo]=await Promise.all([api('/api/jobs'),api('/api/workers'),api('/api/evolution')]);
+  document.querySelector('#jobs').innerHTML=jobs.jobs.map(card).join('');
+  document.querySelector('#workers').innerHTML=workers.workers.map(worker=>`<div class="card"><b>${esc(worker.name)}</b><p class="muted">${esc(worker.id)} · ${esc(worker.worker_type)}</p></div>`).join('');
+  document.querySelector('#summary').innerHTML=`<div class="card"><div class="metric">${jobs.jobs.length}</div><div class="muted">jobs</div></div><div class="card"><div class="metric">${workers.workers.length}</div><div class="muted">workers</div></div><div class="card"><div class="metric">${jobs.jobs.filter(job=>job.status==='ACCEPTED').length}</div><div class="muted">local accepted outcomes</div></div>`;
+  document.querySelector('#evolution').innerHTML=evo.candidates.map(candidate=>`<div class="card"><b>${esc(candidate.version)}</b> <span class="pill">${esc(candidate.status)}</span><pre>${esc(JSON.stringify(candidate.metrics,null,2))}</pre></div>`).join('');
+}
+async function act(button){
+  const {action,id,decision}=button.dataset;
+  if(action==='apply'){
+    const worker_id=prompt('Enter an available worker ID from the list below:');
+    if(!worker_id)return;
+    const proposal=prompt('Short work proposal:')||'';
+    const bid_usd=Number(prompt('Bid in USD:','28'));
+    await api(`/api/jobs/${encodeURIComponent(id)}/applications`,{method:'POST',body:JSON.stringify({worker_id,proposal,bid_usd})});
+  }else if(action==='select'){
+    const reviewer=prompt('Named human selector:');
+    if(!reviewer)return;
+    await api(`/api/applications/${encodeURIComponent(id)}/decision`,{method:'POST',body:JSON.stringify({status:'SELECTED',reviewer})});
+  }else if(action==='launch'){
+    await api(`/api/jobs/${encodeURIComponent(id)}/launch`,{method:'POST',body:'{}'});
+  }else if(action==='evidence'){
+    const criterion_id=prompt('Criterion ID, e.g. PLAN_DIGEST or SECURITY_EVIDENCE:');
+    if(!criterion_id)return;
+    const verifier=prompt('Named verifier (different from selected worker ID):');
+    if(!verifier)return;
+    const artifact_sha256=prompt('Lowercase SHA-256 digest of the reviewed artifact:');
+    if(!artifact_sha256)return;
+    await api(`/api/runs/${encodeURIComponent(id)}/evidence`,{method:'POST',body:JSON.stringify({criterion_id,verifier,artifact_sha256})});
+  }else if(action==='accept'){
+    const reviewer=prompt('Named human acceptance reviewer:');
+    if(!reviewer)return;
+    await api(`/api/jobs/${encodeURIComponent(id)}/acceptance`,{method:'POST',body:JSON.stringify({decision,reviewer})});
+  }
+  await refresh();
+}
+document.querySelector('#jobs').addEventListener('click',event=>{
+  const target=event.target.closest('button[data-action]');
+  if(target)act(target).catch(error=>alert(error.message));
+});
+document.querySelector('#job-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const form=new FormData(event.target);
+  try{
+    await api('/api/jobs',{method:'POST',body:JSON.stringify({title:form.get('title'),objective:form.get('objective'),budget_usd:Number(form.get('budget')),customer_price_usd:Number(form.get('budget')),acceptance_criteria:[{id:'PLAN_DIGEST',description:'Exact plan version recorded',required:true},{id:'SECURITY_EVIDENCE',description:'Security checks attached',required:true},{id:'HUMAN_ACCEPTANCE',description:'Accountable human accepts result',required:true}],worker_policy:{allowed_worker_types:['human','agent','swarm'],requires_independent_verifier:true},evidence_class:'SYNTHETIC'})});
+    event.target.reset();await refresh();
+  }catch(error){alert(error.message)}
+});
+document.querySelector('#worker-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const form=new FormData(event.target);
+  try{
+    await api('/api/workers',{method:'POST',body:JSON.stringify({name:form.get('name'),worker_type:form.get('type'),capabilities:String(form.get('capabilities')).split(',').map(item=>item.trim()).filter(Boolean)})});
+    event.target.reset();await refresh();
+  }catch(error){alert(error.message)}
+});
+refresh().catch(error=>alert(error.message));
 </script></body></html>
