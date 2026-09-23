@@ -1,0 +1,17 @@
+{
+  "case_id": "agent-failure-clinic-cloud-timeout-v1",
+  "claim": "A valid Terraform-like plan followed by a timeout means the multi-cloud change succeeded.",
+  "hidden_failure": "The executor's local state and the provider's authoritative state can diverge after a timeout, duplicate effect, rollback, or lost response.",
+  "verifier": "Read the provider-owned postcondition and receipt using the stable intent_id; do not treat the executor's success signal as evidence.",
+  "expected_results": {
+    "provider_receipt_and_postcondition_agree": "COMMITTED",
+    "authoritative_read_proves_baseline": "NOT_COMMITTED",
+    "provider_read_unavailable_or_states_diverge": "UNRESOLVED"
+  },
+  "limitations": [
+    "Synthetic local reference only.",
+    "No Terraform provider, cloud account, payment, or customer data is used.",
+    "The fixture tests verifier logic, not cloud-provider correctness or production reliability."
+  ],
+  "reproduction": "python3 -m unittest discover -s tests -v"
+}

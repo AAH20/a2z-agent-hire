@@ -1,9 +1,65 @@
 import unittest
 
 from packages.oss.outcome_exchange.core import ExchangeDB
+from packages.oss.outcome_exchange.failure_clinic import (
+    COMMITTED,
+    NOT_COMMITTED,
+    UNRESOLVED,
+    state_digest,
+    verify_cloud_change,
+)
 
 
 class ExchangeCoreTests(unittest.TestCase):
+    def test_failure_clinic_cloud_timeout_has_three_verdicts(self):
+        intent_id = "intent-cloud-001"
+        baseline = {"region_a": "absent", "region_b": "absent"}
+        desired = {"region_a": "present", "region_b": "present"}
+
+        committed = verify_cloud_change(
+            intent_id=intent_id,
+            desired_state=desired,
+            baseline_state=baseline,
+            local_state=desired,
+            provider_state=desired,
+            provider_receipt={"intent_id": intent_id, "state_digest": state_digest(desired)},
+        )
+        self.assertEqual(committed["verdict"], COMMITTED)
+
+        not_committed = verify_cloud_change(
+            intent_id=intent_id,
+            desired_state=desired,
+            baseline_state=baseline,
+            local_state=baseline,
+            provider_state=baseline,
+            provider_receipt=None,
+            absence_proven=True,
+        )
+        self.assertEqual(not_committed["verdict"], NOT_COMMITTED)
+
+        unresolved = verify_cloud_change(
+            intent_id=intent_id,
+            desired_state=desired,
+            baseline_state=baseline,
+            local_state=desired,
+            provider_state=None,
+            provider_receipt=None,
+            provider_read="TIMEOUT",
+        )
+        self.assertEqual(unresolved["verdict"], UNRESOLVED)
+
+        divergence = verify_cloud_change(
+            intent_id=intent_id,
+            desired_state=desired,
+            baseline_state=baseline,
+            local_state=desired,
+            provider_state=baseline,
+            provider_receipt=None,
+            absence_proven=False,
+        )
+        self.assertEqual(divergence["verdict"], UNRESOLVED)
+        self.assertIn("LOCAL_PROVIDER_DIVERGENCE", divergence["failure_codes"])
+
     def test_job_board_hiring_swarm_acceptance_and_economics(self):
         db = ExchangeDB()
         job_id = db.jobs()[0]["id"]

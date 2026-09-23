@@ -45,6 +45,15 @@ Run the tests:
 python3 -m unittest discover -s tests -v
 ```
 
+## Agent Failure Clinic: cloud timeout
+
+`fixtures/agent-failure-clinic-cloud-timeout.json` defines a synthetic
+Terraform-like timeout case. The verifier reads a provider-owned postcondition
+and receipt using one stable `intent_id`; it never treats the executor's local
+success signal as proof. The test distinguishes `COMMITTED`, `NOT_COMMITTED`,
+and `UNRESOLVED`, including local/provider divergence. Run the command above
+to reproduce it locally.
+
 ## Honest implementation boundary
 
 The local router is **Laya/Jev-compatible by decision shape**, not a bundled
