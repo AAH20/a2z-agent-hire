@@ -63,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
             elif path == "/api/health":
-                self.send_json(200, {"ok": True, "version": "0.1.0", "scope": "LOCAL_OSS_REFERENCE"})
+                self.send_json(200, {"ok": True, "version": "0.2.0", "scope": "LOCAL_OSS_REFERENCE"})
             elif path == "/api/jobs":
                 self.send_json(200, {"jobs": self.db.jobs()})
             elif path == "/api/opportunities":
@@ -131,10 +131,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": str(exc)})
 
 
-def serve(db_path: str, host: str, port: int) -> None:
+def serve(db_path: str, host: str, port: int, *, seed_demo: bool = True) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("reference API has no authentication; bind only to loopback")
-    db = ExchangeDB(db_path)
+    db = ExchangeDB(db_path, seed_demo=seed_demo)
     Handler.db = db
     server = HTTPServer((host, port), Handler)
     print(f"A2Z Agent Hire listening at http://{host}:{port}")
@@ -152,8 +152,10 @@ def main() -> None:
     parser.add_argument("--db", default="a2z-agent-hire.db")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
+    parser.add_argument("--no-demo-seed", action="store_true",
+                        help="Keep the local database free of synthetic workers and jobs")
     args = parser.parse_args()
-    serve(args.db, args.host, args.port)
+    serve(args.db, args.host, args.port, seed_demo=not args.no_demo_seed)
 
 
 if __name__ == "__main__":

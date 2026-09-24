@@ -70,19 +70,30 @@ CREATE TABLE IF NOT EXISTS evolution(
 );
 CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
  entity_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS entity_handoffs(
+ bundle_digest TEXT PRIMARY KEY, source_receipt_digest TEXT NOT NULL,
+ as_of TEXT NOT NULL, job_count INTEGER NOT NULL, imported_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS entity_handoff_jobs(
+ job_id TEXT PRIMARY KEY REFERENCES jobs(id),
+ bundle_digest TEXT NOT NULL REFERENCES entity_handoffs(bundle_digest),
+ source_entity_id TEXT NOT NULL, source_obligation_id TEXT NOT NULL
+);
 """
 
 
 class ExchangeDB:
     """SQLite-backed OSS reference runtime; no network or credential assumptions."""
 
-    def __init__(self, path: str | Path = ":memory:"):
+    def __init__(self, path: str | Path = ":memory:", *, seed_demo: bool = True):
         self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(SCHEMA)
         self.db.commit()
         self.opportunities = OpportunityStore(self.db)
-        self.seed()
+        if seed_demo:
+            self.seed()
 
     def close(self) -> None:
         self.db.close()
