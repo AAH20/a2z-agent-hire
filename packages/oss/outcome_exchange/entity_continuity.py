@@ -28,6 +28,16 @@ def _zero_money(value: Any) -> bool:
     return type(value) in {int, float} and value == 0
 
 
+def _validate_intake_provenance(value: dict[str, str] | None) -> None:
+    if value is None:
+        return
+    if (not isinstance(value, dict) or set(value) != {"intake_record_digest", "workspace_id"} or
+            not isinstance(value["intake_record_digest"], str) or
+            re.fullmatch(r"[0-9a-f]{64}", value["intake_record_digest"]) is None or
+            not _nonempty(value["workspace_id"])):
+        raise ValueError("intake provenance is incomplete")
+
+
 def _validate(bundle: dict[str, Any], verified_bundle_digest: str) -> list[dict[str, Any]]:
     """Validate the portable contract after exact-source verification by the caller."""
     if not isinstance(bundle, dict) or set(bundle) != {
@@ -107,22 +117,34 @@ def _validate(bundle: dict[str, Any], verified_bundle_digest: str) -> list[dict[
     return jobs
 
 
-def preview_handoff(bundle: dict[str, Any], *, verified_bundle_digest: str) -> dict[str, Any]:
+def preview_handoff(bundle: dict[str, Any], *, verified_bundle_digest: str,
+                    intake_provenance: dict[str, str] | None = None) -> dict[str, Any]:
     """Show the exact import scope without opening or changing a database."""
     jobs = _validate(bundle, verified_bundle_digest)
+    _validate_intake_provenance(intake_provenance)
     return {"dry_run": True, "job_count": len(jobs),
             "job_ids": [item["a2z_job"]["id"] for item in jobs],
             "bundle_digest": bundle["bundle_digest"],
-            "source_receipt_digest": bundle["source_receipt_digest"]}
+            "source_receipt_digest": bundle["source_receipt_digest"],
+            "intake_provenance": intake_provenance}
 
 
 def import_handoff(db: ExchangeDB, bundle: dict[str, Any], *,
-                   verified_bundle_digest: str) -> dict[str, Any]:
+                   verified_bundle_digest: str,
+                   intake_provenance: dict[str, str] | None = None) -> dict[str, Any]:
     """Persist a verified bundle and all jobs in one SQLite transaction."""
     jobs = _validate(bundle, verified_bundle_digest)
+    _validate_intake_provenance(intake_provenance)
     digest = bundle["bundle_digest"]
     recorded = db.db.execute("SELECT * FROM entity_handoffs WHERE bundle_digest=?", (digest,)).fetchone()
     if recorded is not None:
+        intake_link = db.db.execute("SELECT * FROM entity_intake_links WHERE bundle_digest=?",
+                                    (digest,)).fetchone()
+        if ((intake_provenance is None) != (intake_link is None) or
+                (intake_link is not None and
+                 (intake_link["intake_record_digest"] != intake_provenance["intake_record_digest"] or
+                  intake_link["workspace_id"] != intake_provenance["workspace_id"]))):
+            raise ValueError("recorded handoff intake provenance differs")
         mappings = {row["job_id"]: row for row in db.db.execute(
             "SELECT * FROM entity_handoff_jobs WHERE bundle_digest=?", (digest,))}
         expected = {item["a2z_job"]["id"]: item for item in jobs}
@@ -146,7 +168,8 @@ def import_handoff(db: ExchangeDB, bundle: dict[str, Any], *,
                     stored["economics"]["costs"] != job["economics"]):
                 raise ValueError("recorded handoff job contract differs")
         return {"created": [], "unchanged": sorted(expected), "bundle_digest": digest,
-                "source_receipt_digest": bundle["source_receipt_digest"], "scope": bundle["scope"]}
+                "source_receipt_digest": bundle["source_receipt_digest"], "scope": bundle["scope"],
+                "intake_provenance": intake_provenance}
     # A deterministic ID already owned by another import or job is a conflict.
     for item in jobs:
         job_id = item["a2z_job"]["id"]
@@ -155,6 +178,10 @@ def import_handoff(db: ExchangeDB, bundle: dict[str, Any], *,
     with db.db:
         db.db.execute("INSERT INTO entity_handoffs VALUES(?,?,?,?,?)",
                       (digest, bundle["source_receipt_digest"], bundle["as_of"], len(jobs), utc_now()))
+        if intake_provenance is not None:
+            db.db.execute("INSERT INTO entity_intake_links VALUES(?,?,?)",
+                          (digest, intake_provenance["intake_record_digest"],
+                           intake_provenance["workspace_id"]))
         for item in jobs:
             job = item["a2z_job"]
             source = item["source"]
@@ -163,4 +190,4 @@ def import_handoff(db: ExchangeDB, bundle: dict[str, Any], *,
                           (job["id"], digest, source["entity_id"], source["obligation_id"]))
     return {"created": [item["a2z_job"]["id"] for item in jobs], "unchanged": [],
             "bundle_digest": digest, "source_receipt_digest": bundle["source_receipt_digest"],
-            "scope": bundle["scope"]}
+            "scope": bundle["scope"], "intake_provenance": intake_provenance}

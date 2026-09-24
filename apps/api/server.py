@@ -63,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
             elif path == "/api/health":
-                self.send_json(200, {"ok": True, "version": "0.2.0", "scope": "LOCAL_OSS_REFERENCE"})
+                self.send_json(200, {"ok": True, "version": "0.3.0", "scope": "LOCAL_OSS_REFERENCE"})
             elif path == "/api/jobs":
                 self.send_json(200, {"jobs": self.db.jobs()})
             elif path == "/api/opportunities":

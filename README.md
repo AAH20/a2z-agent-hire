@@ -4,7 +4,7 @@ A local-first, inspectable opportunity, application, and outcome contract for **
 
 The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with eleven GitHub-compatible Mermaid diagrams covering the workflow, state machine, data and evidence model, routing, economics, hosted target, trust zones, and links to the wider A2Z ecosystem. The [UI design and funnel contract](docs/UI_DESIGN.md) describes the landing page, interactions, accessibility, and honest claim boundaries.
 
-The [Entity Continuity](https://github.com/AAH20/entity-continuity) integration imports source-verified, synthetic **human-review** job drafts for entity evidence gaps. The [local import guide](docs/ENTITY_CONTINUITY_IMPORT.md) covers dry-run preview, atomic import, clean-data mode and v1-to-v2 migration; the [integration architecture](https://github.com/AAH20/entity-continuity/blob/main/docs/A2Z_AGENT_HIRE_INTEGRATION.md) covers the source boundary. It does not create legal authority, complete a filing, or contact an external provider.
+The [Entity Continuity](https://github.com/AAH20/entity-continuity) integration imports source-verified, synthetic **human-review** job drafts for entity evidence gaps. The [local import guide](docs/ENTITY_CONTINUITY_IMPORT.md) covers dry-run preview, atomic import, optional read-only intake provenance, clean-data mode and v1-to-v2 migration; the [integration architecture](https://github.com/AAH20/entity-continuity/blob/main/docs/A2Z_AGENT_HIRE_INTEGRATION.md) covers the source boundary. It does not create legal authority, complete a filing, or contact an external provider.
 
 ## Why this exists
 

@@ -15,27 +15,44 @@ def main() -> int:
     parser.add_argument("--pack", required=True)
     parser.add_argument("--receipt", required=True)
     parser.add_argument("--as-of", required=True)
+    parser.add_argument("--intake-manifest", help="Optional synthetic read-only intake manifest")
+    parser.add_argument("--intake-record", help="Optional exact-source intake record")
     parser.add_argument("--db", help="Local A2Z Agent Hire SQLite path; required unless --dry-run")
     parser.add_argument("--dry-run", action="store_true", help="Verify and preview without opening a database")
     args = parser.parse_args()
     try:
         try:
             from entity_continuity.a2z_agent_hire import verify_handoff
-            from entity_continuity.engine import load_json
+            from entity_continuity.engine import read_json_document
+            from entity_continuity.read_only_intake import verify_intake
         except ImportError as exc:
             raise ValueError("Entity Continuity must be installed or on PYTHONPATH to verify source files") from exc
-        with open(args.bundle, encoding="utf-8") as stream:
-            bundle = json.load(stream)
-        verified = verify_handoff(load_json(args.case), load_json(args.pack), args.as_of,
-                                  load_json(args.receipt), bundle)
+        bundle, _ = read_json_document(args.bundle)
+        case, case_digest = read_json_document(args.case)
+        pack, pack_digest = read_json_document(args.pack)
+        receipt, _ = read_json_document(args.receipt)
+        verified = verify_handoff(case, pack, args.as_of, receipt, bundle)
+        if bool(args.intake_manifest) != bool(args.intake_record):
+            raise ValueError("--intake-manifest and --intake-record must be supplied together")
+        intake_provenance = None
+        if args.intake_manifest:
+            manifest, _ = read_json_document(args.intake_manifest, max_bytes=16_384)
+            record, _ = read_json_document(args.intake_record)
+            verify_intake(manifest, case, pack, args.as_of, case_digest, pack_digest, record)
+            if record["receipt"] != receipt or record["entity_id"] != receipt["entity_id"]:
+                raise ValueError("intake record does not match the handoff receipt and entity")
+            intake_provenance = {"intake_record_digest": record["record_digest"],
+                                 "workspace_id": record["workspace_id"]}
         if args.dry_run:
-            result = preview_handoff(bundle, verified_bundle_digest=verified["bundle_digest"])
+            result = preview_handoff(bundle, verified_bundle_digest=verified["bundle_digest"],
+                                     intake_provenance=intake_provenance)
         else:
             if not args.db:
                 raise ValueError("--db is required unless --dry-run is used")
             db = ExchangeDB(args.db, seed_demo=False)
             try:
-                result = import_handoff(db, bundle, verified_bundle_digest=verified["bundle_digest"])
+                result = import_handoff(db, bundle, verified_bundle_digest=verified["bundle_digest"],
+                                        intake_provenance=intake_provenance)
             finally:
                 db.close()
     except (ValueError, OSError, sqlite3.Error, json.JSONDecodeError) as exc:

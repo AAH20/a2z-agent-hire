@@ -1,6 +1,6 @@
 # Entity Continuity import: local operations
 
-A2Z Agent Hire v0.2 accepts **v2 synthetic human-review bundles** exported by [Entity Continuity](https://github.com/AAH20/entity-continuity). This is a local, offline import. It is not a provider marketplace, legal-work order, employment decision, or filing channel.
+A2Z Agent Hire v0.3 accepts **v2 synthetic human-review bundles** exported by [Entity Continuity](https://github.com/AAH20/entity-continuity). It can optionally bind each imported bundle to an independently replayed Entity Continuity v0.5 intake record. This is a local, offline import. It is not a provider marketplace, legal-work order, employment decision, or filing channel.
 
 ## Import contract
 
@@ -22,6 +22,8 @@ flowchart LR
 
 The importer checks the exact source files, v2 schema, dates, digest, stable job IDs, human-only worker policy, three required acceptance criteria and seven explicit zero-cost fields. It inserts the manifest, foreign-key-bound mappings and jobs in one transaction. A second import returns the recorded job IDs. A changed or incomplete stored job stops replay. The digests bind local bytes; they do not authenticate the customer, reviewer or document origin.
 
+When `--intake-manifest` and `--intake-record` are supplied together, the importer also replays the declared synthetic intake against the same case, pack and date. It requires the intake's embedded receipt to equal the handoff receipt and stores only `intake_record_digest` and `workspace_id` in a foreign-key-bound provenance row. Replay cannot silently omit or change that link. The workspace ID is a namespace, **not tenant isolation**.
+
 ## Reproduce with sibling checkouts
 
 Generate a receipt and bundle in Entity Continuity as described in its [integration guide](https://github.com/AAH20/entity-continuity/blob/main/docs/A2Z_AGENT_HIRE_INTEGRATION.md). Then, from this repository:
@@ -42,9 +44,18 @@ python3 -m apps.api.server --db /tmp/a2z-entity-demo.db --no-demo-seed --port 87
 
 The server is loopback-only and unauthenticated. Use it only for local reference work. `--no-demo-seed` prevents fictional workers and the seeded cloud job from appearing in a clean database; it does not add production authentication.
 
+To include optional intake provenance, first create and verify `/tmp/entity-intake-record.json` using the [read-only intake protocol](https://github.com/AAH20/entity-continuity/blob/main/docs/READ_ONLY_INTAKE.md). Add these two arguments to both the dry run and actual import commands:
+
+```bash
+--intake-manifest ../entity-continuity/examples/synthetic-read-only-intake-manifest.json \
+--intake-record /tmp/entity-intake-record.json
+```
+
+An intake-linked bundle must be reimported with the same verified intake. Existing unlinked imports are not upgraded by silently attaching a new record; use a reviewed migration or a fresh synthetic database.
+
 ## Version migration and recovery
 
-The previous v1 handoff omitted explicit zero-cost fields. Re-export from Entity Continuity v0.4 to obtain v2. The v2 importer **rejects v1** rather than guessing economics. A v1 job already in a local database has no v2 manifest and causes a stable-ID conflict; use a separate clean demo database or plan a reviewed migration. Do not delete customer records to work around a conflict.
+The previous v1 handoff omitted explicit zero-cost fields. Re-export from Entity Continuity v0.5 to obtain v2. The v2 importer **rejects v1** rather than guessing economics. A v1 job already in a local database has no v2 manifest and causes a stable-ID conflict; use a separate clean demo database or plan a reviewed migration. Do not delete customer records to work around a conflict.
 
 On an import failure, the transaction leaves no partial handoff jobs. Keep the original bundle and source files for investigation. Correct the source or contract and regenerate a new receipt and bundle; do not edit a digest by hand. A recorded bundle whose job content or mapping changed is rejected on replay.
 

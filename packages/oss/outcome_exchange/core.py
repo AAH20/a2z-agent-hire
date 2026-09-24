@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS entity_handoff_jobs(
  bundle_digest TEXT NOT NULL REFERENCES entity_handoffs(bundle_digest),
  source_entity_id TEXT NOT NULL, source_obligation_id TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS entity_intake_links(
+ bundle_digest TEXT PRIMARY KEY REFERENCES entity_handoffs(bundle_digest),
+ intake_record_digest TEXT NOT NULL, workspace_id TEXT NOT NULL
+);
 """
 
 

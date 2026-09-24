@@ -126,6 +126,30 @@ class EntityContinuityImportTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_intake_provenance_is_atomic_and_cannot_be_stripped(self):
+        db = ExchangeDB(seed_demo=False)
+        try:
+            bundle = fixture()
+            provenance = {"intake_record_digest": "c" * 64, "workspace_id": "demo-workspace"}
+            preview = preview_handoff(bundle, verified_bundle_digest=bundle["bundle_digest"],
+                                      intake_provenance=provenance)
+            self.assertEqual(preview["intake_provenance"], provenance)
+            first = import_handoff(db, bundle, verified_bundle_digest=bundle["bundle_digest"],
+                                   intake_provenance=provenance)
+            self.assertEqual(first["intake_provenance"], provenance)
+            self.assertEqual(db.db.execute("SELECT COUNT(*) FROM entity_intake_links").fetchone()[0], 1)
+            with self.assertRaisesRegex(ValueError, "provenance differs"):
+                import_handoff(db, bundle, verified_bundle_digest=bundle["bundle_digest"])
+            with self.assertRaisesRegex(ValueError, "provenance differs"):
+                import_handoff(db, bundle, verified_bundle_digest=bundle["bundle_digest"],
+                               intake_provenance={"intake_record_digest": "d" * 64,
+                                                  "workspace_id": "demo-workspace"})
+            repeated = import_handoff(db, bundle, verified_bundle_digest=bundle["bundle_digest"],
+                                      intake_provenance=provenance)
+            self.assertEqual(repeated["created"], [])
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
