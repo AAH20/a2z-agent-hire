@@ -26,6 +26,8 @@ flowchart LR
 | Capability | Current behavior | Limit |
 | --- | --- | --- |
 | Board | SQLite jobs, workers, applications, runs, evolution, events | Single local operator; no tenants |
+| Opportunity intake | One public Lever board at a time, stable IDs, freshness, two-miss closure | API-observed only; no employer identity verification or broad job search |
+| Application tracker | Manual local status, note, and follow-up timestamp | No accounts, scheduled reminder, or automatic application |
 | Human gate | Named reviewer selects one application before launch | Names are text, not authenticated identities |
 | Routing | Typed choice with worker options and probabilities | Heuristic shape; no model or calibration |
 | Swarm | Deterministic replay stages | No agent execution, tools, or orchestration |
@@ -42,6 +44,8 @@ flowchart TB
   subgraph OSS[Implemented OSS reference]
     Browser[apps/web/index.html]
     API[apps/api/server.py]
+    Intake[apps/api/import_opportunities.py]
+    Opportunity[packages/oss/outcome_exchange/opportunities.py]
     Core[packages/oss/outcome_exchange/core.py]
     Clinic[packages/oss/outcome_exchange/failure_clinic.py]
     DB[(Local SQLite)]
@@ -49,6 +53,8 @@ flowchart TB
     Fixtures[fixtures synthetic cases]
     Tests[tests and CI]
     Browser --> API --> Core --> DB
+    Intake --> Opportunity --> DB
+    API --> Opportunity
     Clinic --> Tests
     Fixtures --> Tests
     Core --> Tests
@@ -71,6 +77,8 @@ flowchart TB
 ```
 
 The current Python runtime does **not** validate every request against the schemas in `protocols/`. Hosted infrastructure should reuse portable contract semantics while isolating credentials, customer data, private benchmark packs, and settlement.
+
+The [opportunity intake architecture](OPPORTUNITY_INTAKE.md) specifies the fixed public-source adapter, atomic refresh, freshness, two-miss closure, and manual application tracker. It is a first step toward the discovery phase, not proof of competitive parity with a job-search service.
 
 ## 3. Human-controlled workflow
 
@@ -327,8 +335,8 @@ None of these edges are implemented here. Start with one export contract and a c
 
 | Phase | Work | Release gate |
 | --- | --- | --- |
-| 0: Local reference | Selection, evidence, acceptance, replay, economics, UI/API tests, truthful docs | One command reproduces synthetic accepted and unresolved cases |
-| 1: Contract hardening | Version schemas, enforce validation, migrations, foreign keys, immutable attempts | Malformed records rejected; old fixtures migrate |
+| 0: Local reference | Selection, evidence, acceptance, replay, economics, one bounded opportunity adapter, manual tracker, UI/API tests, truthful docs | Synthetic accepted and unresolved cases plus offline source-refresh tests pass |
+| 1: Contract hardening | Version schemas, enforce validation, migrations, foreign keys, immutable attempts, authenticated candidate ownership | Malformed records rejected; old fixtures migrate; users cannot read each other's tracks |
 | 2: Bounded executor | Adapter SDK, sandbox, budgets, deadlines, cancellation, output manifest | Chaos cases leave no unknown side effects |
 | 3: Independent evidence | Server hashes bytes, authenticated verifier, source receipts | Tampered or missing evidence blocks acceptance |
 | 4: Consented pilot | One job family, human acceptance, actual costs, dispute path | Cohort denominators and failures reported |

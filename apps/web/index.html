@@ -9,8 +9,10 @@
 </head>
 <body><main>
   <h1>A2Z Agent Hire</h1>
-  <p class="muted">Human-controlled job board for evaluated agent work and swarms.</p>
+  <p class="muted">Local opportunity discovery, application tracking, and human-controlled agent work.</p>
   <div id="summary" class="grid"></div>
+  <section><h2>Employer-source opportunities</h2><p class="muted">Import a public Lever board with the documented CLI. Source-observed means a posting appeared in that API; it is not employer identity verification.</p><div id="opportunities" class="grid"></div></section>
+  <section><h2>Local application tracker</h2><div id="tracks" class="grid"></div></section>
   <section><h2>Jobs</h2><div id="jobs"></div></section>
   <section><h2>Available workers</h2><div id="workers" class="grid"></div></section>
   <section class="grid">
@@ -32,6 +34,11 @@
 </main>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function localDateInput(iso){
+  if(!iso)return '';
+  const d=new Date(iso),pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 async function api(path,opts={}){
   const response=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
   const value=await response.json();
@@ -56,10 +63,17 @@ function card(job){
   return `<div class="card"><div class="row"><h3>${esc(job.title)}</h3><span class="pill">${esc(job.status)}</span><span class="pill">${esc(job.evidence_class)}</span></div><p>${esc(job.objective)}</p><p class="muted">Budget $${esc(job.budget_usd)} · Price $${esc(job.customer_price_usd)} · ${job.applications.length} applications</p><div class="row">${actions.join('')}</div><h4>Applications</h4>${applications||'<p class="muted">No applications yet.</p>'}${detail}</div>`;
 }
 async function refresh(){
-  const [jobs,workers,evo]=await Promise.all([api('/api/jobs'),api('/api/workers'),api('/api/evolution')]);
+  const [jobs,workers,evo,opportunities,tracks]=await Promise.all([api('/api/jobs'),api('/api/workers'),api('/api/evolution'),api('/api/opportunities'),api('/api/tracks')]);
   document.querySelector('#jobs').innerHTML=jobs.jobs.map(card).join('');
+  const trackByOpportunity=new Map(tracks.tracks.map(item=>[item.opportunity_id,item]));
+  document.querySelector('#opportunities').innerHTML=opportunities.opportunities.map(item=>{
+    const current=trackByOpportunity.get(item.id);
+    const options=['SAVED','APPLIED','INTERVIEW','OFFER','CLOSED'].map(status=>`<option${current?.status===status?' selected':''}>${status}</option>`).join('');
+    return `<div class="card"><h3>${esc(item.title)}</h3><p>${esc(item.organization)} · ${esc(item.location)}</p><p><span class="pill">${esc(item.freshness)}</span> <span class="pill">public provider API observed</span></p><p><a href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">Employer-hosted posting</a></p><form class="track-form" data-id="${esc(item.id)}"><label>Application status<select name="status">${options}</select></label><label>Local note<input name="note" maxlength="1000" value="${esc(current?.note||'')}"></label><label>Follow-up date and time<input name="follow_up_at" type="datetime-local" value="${esc(localDateInput(current?.follow_up_at))}"></label><button>Save local status</button></form></div>`;
+  }).join('')||'<p class="muted">No active opportunities imported. Run the Lever importer shown in the README.</p>';
+  document.querySelector('#tracks').innerHTML=tracks.tracks.map(item=>`<div class="card"><b>${esc(item.title)}</b><p>${esc(item.organization)} · <span class="pill">${esc(item.status)}</span> · source ${esc(item.opportunity_status)}</p><p>${esc(item.note)}</p><p class="muted">Follow up: ${esc(item.follow_up_at||'not set')}</p></div>`).join('')||'<p class="muted">No locally tracked applications.</p>';
   document.querySelector('#workers').innerHTML=workers.workers.map(worker=>`<div class="card"><b>${esc(worker.name)}</b><p class="muted">${esc(worker.id)} · ${esc(worker.worker_type)}</p></div>`).join('');
-  document.querySelector('#summary').innerHTML=`<div class="card"><div class="metric">${jobs.jobs.length}</div><div class="muted">jobs</div></div><div class="card"><div class="metric">${workers.workers.length}</div><div class="muted">workers</div></div><div class="card"><div class="metric">${jobs.jobs.filter(job=>job.status==='ACCEPTED').length}</div><div class="muted">local accepted outcomes</div></div>`;
+  document.querySelector('#summary').innerHTML=`<div class="card"><div class="metric">${opportunities.opportunities.length}</div><div class="muted">active source-observed opportunities</div></div><div class="card"><div class="metric">${jobs.jobs.length}</div><div class="muted">local jobs</div></div><div class="card"><div class="metric">${jobs.jobs.filter(job=>job.status==='ACCEPTED').length}</div><div class="muted">local accepted outcomes</div></div>`;
   document.querySelector('#evolution').innerHTML=evo.candidates.map(candidate=>`<div class="card"><b>${esc(candidate.version)}</b> <span class="pill">${esc(candidate.status)}</span><pre>${esc(JSON.stringify(candidate.metrics,null,2))}</pre></div>`).join('');
 }
 async function act(button){
@@ -94,6 +108,18 @@ async function act(button){
 document.querySelector('#jobs').addEventListener('click',event=>{
   const target=event.target.closest('button[data-action]');
   if(target)act(target).catch(error=>alert(error.message));
+});
+document.querySelector('#opportunities').addEventListener('submit',async event=>{
+  const form=event.target.closest('form.track-form');
+  if(!form)return;
+  event.preventDefault();
+  const values=new FormData(form);
+  try{
+    const localTime=String(values.get('follow_up_at')||'');
+    const follow_up_at=localTime?new Date(localTime).toISOString():null;
+    await api(`/api/opportunities/${encodeURIComponent(form.dataset.id)}/track`,{method:'POST',body:JSON.stringify({status:values.get('status'),note:values.get('note'),follow_up_at})});
+    await refresh();
+  }catch(error){alert(error.message)}
 });
 document.querySelector('#job-form').addEventListener('submit',async event=>{
   event.preventDefault();

@@ -1,6 +1,6 @@
 # A2Z Agent Hire
 
-A local-first, inspectable job-and-outcome contract for **human-controlled agent work**. It gives a buyer a way to state the job, review worker applications, select one worker, require evidence, record human acceptance, and inspect estimated unit economics. The included replay and data are synthetic; this is a reference implementation, not a live hiring marketplace.
+A local-first, inspectable opportunity, application, and outcome contract for **human-controlled agent work**. It can import a public employer posting feed, track applications locally, and demonstrate a buyer's path from job contract through worker selection, declared evidence, human acceptance, and estimated unit economics. The work replay and seeded data are synthetic; this is a reference implementation, not a live hiring marketplace.
 
 The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with eleven GitHub-compatible Mermaid diagrams covering the workflow, state machine, data and evidence model, routing, economics, hosted target, trust zones, and links to the wider A2Z ecosystem.
 
@@ -32,6 +32,14 @@ python3 -m venv .venv
 
 Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The server binds loopback only because it has no authentication. The dashboard lets you create jobs, register worker records, submit applications, select a worker, replay a run, record operator-declared evidence digests, make an acceptance decision, and inspect economics. It is a single-operator local demo, not an internet service.
 
+To import a public Lever employer board into the **same** database:
+
+```bash
+.venv/bin/python -m apps.api.import_opportunities --db /tmp/a2z-agent-hire.db --site leverdemo --region global
+```
+
+The dashboard then shows employer-hosted posting links, observation freshness, and a manual local application tracker. The importer uses a fixed public API host and does not submit applications. A posting observed in the API is not independently employer-verified. See [opportunity intake and its exact closure rules](docs/OPPORTUNITY_INTAKE.md).
+
 Run checks:
 
 ```bash
@@ -53,6 +61,7 @@ These steps show **contract enforcement only**. Entering a made-up digest can sa
 | Module | Role | Boundary |
 | --- | --- | --- |
 | `packages/oss/outcome_exchange/core.py` | SQLite contracts, hiring states, synthetic run, evidence declarations, economics, evolution gate | No authentication, artifact bytes, model execution, or transactions |
+| `packages/oss/outcome_exchange/opportunities.py` | Bounded Lever intake, deduplication, two-miss closure, freshness, local tracking | No cross-source search, candidate accounts, live verification, or reminders |
 | `apps/api/server.py` | Loopback HTTP API | No multi-user authorization |
 | `apps/web/index.html` | Local dashboard | No production account or payment UI |
 | `packages/oss/outcome_exchange/failure_clinic.py` | Synthetic three-verdict postcondition check | No provider connection |
@@ -72,7 +81,7 @@ The detailed [architecture](docs/ARCHITECTURE.md) covers:
 - proposed OSS adapters and a separate commercial control plane;
 - production trust zones, phased release gates, and unsolved failure modes.
 
-The order of work is: harden versioned contracts and immutable attempts; add bounded executor adapters; verify artifact bytes and reviewer identity; test one consented paid job family with actual costs; then consider multi-tenant hosting and settlement. A marketplace, viral growth, or profitability is not implied by the local reference.
+The order of work is: validate the new opportunity intake with real users; harden versioned contracts and immutable attempts; add bounded executor adapters; verify artifact bytes and reviewer identity; test one consented paid job family with actual costs; then consider multi-tenant hosting and settlement. A marketplace, viral growth, or profitability is not implied by the local reference.
 
 ## Agent Failure Clinic: cloud timeout
 

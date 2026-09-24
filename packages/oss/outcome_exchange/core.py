@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from packages.oss.outcome_exchange.opportunities import OpportunityStore
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -79,6 +81,7 @@ class ExchangeDB:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         self.db.commit()
+        self.opportunities = OpportunityStore(self.db)
         self.seed()
 
     def close(self) -> None:

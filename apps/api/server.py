@@ -6,7 +6,7 @@ import argparse
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from packages.oss.outcome_exchange.core import ExchangeDB
 
@@ -39,7 +39,8 @@ class Handler(BaseHTTPRequestHandler):
         return value
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         try:
             if path == "/":
                 body = WEB.read_bytes()
@@ -52,6 +53,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "version": "0.1.0", "scope": "LOCAL_OSS_REFERENCE"})
             elif path == "/api/jobs":
                 self.send_json(200, {"jobs": self.db.jobs()})
+            elif path == "/api/opportunities":
+                status = parse_qs(parsed.query).get("status", ["ACTIVE"])[0]
+                self.send_json(200, {"opportunities": self.db.opportunities.list(None if status == "ALL" else status)})
+            elif path == "/api/tracks":
+                self.send_json(200, {"tracks": self.db.opportunities.tracks()})
             elif path.startswith("/api/jobs/") and path.endswith("/economics"):
                 self.send_json(200, self.db.economics(path.split("/")[3]))
             elif path.startswith("/api/jobs/"):
@@ -73,6 +79,10 @@ class Handler(BaseHTTPRequestHandler):
             data = self.read_body()
             if path == "/api/jobs":
                 self.send_json(201, self.db.create_job(data))
+            elif path.startswith("/api/opportunities/") and path.endswith("/track"):
+                self.send_json(200, self.db.opportunities.track(path.split("/")[3],
+                              str(data.get("status", "")), str(data.get("note", "")),
+                              data.get("follow_up_at")))
             elif path == "/api/workers":
                 self.send_json(201, self.db.create_worker(data))
             elif path == "/api/evolution":

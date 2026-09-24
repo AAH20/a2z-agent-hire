@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A2Z Agent Hire Opportunity",
+  "description": "Portable shape for one public-source-observed opportunity. Published contract; local runtime does not yet enforce JSON Schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "provider",
+    "site",
+    "external_id",
+    "title",
+    "organization",
+    "location",
+    "source_url",
+    "apply_url",
+    "first_seen_at",
+    "last_seen_at",
+    "last_refresh_id",
+    "missing_count",
+    "status",
+    "freshness"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^OPP-[A-F0-9]{12}$"},
+    "provider": {"const": "lever"},
+    "site": {"type": "string", "minLength": 1},
+    "external_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "organization": {"type": "string", "minLength": 1},
+    "location": {"type": "string"},
+    "source_url": {"type": "string", "format": "uri", "pattern": "^https://jobs\\.(eu\\.)?lever\\.co/"},
+    "apply_url": {"type": "string", "format": "uri", "pattern": "^https://jobs\\.(eu\\.)?lever\\.co/"},
+    "first_seen_at": {"type": "string", "format": "date-time"},
+    "last_seen_at": {"type": "string", "format": "date-time"},
+    "last_refresh_id": {"type": "string"},
+    "missing_count": {"type": "integer", "minimum": 0},
+    "status": {"enum": ["ACTIVE", "CLOSED"]},
+    "freshness": {"enum": ["FRESH", "AGING", "STALE", "MISSING_ONCE", "CLOSED"]}
+  }
+}
