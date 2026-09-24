@@ -4,6 +4,8 @@ A local-first, inspectable opportunity, application, and outcome contract for **
 
 The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with eleven GitHub-compatible Mermaid diagrams covering the workflow, state machine, data and evidence model, routing, economics, hosted target, trust zones, and links to the wider A2Z ecosystem. The [UI design and funnel contract](docs/UI_DESIGN.md) describes the landing page, interactions, accessibility, and honest claim boundaries.
 
+The [Entity Continuity](https://github.com/AAH20/entity-continuity) integration imports source-verified, synthetic **human-review** job drafts for entity evidence gaps. See its [integration architecture](https://github.com/AAH20/entity-continuity/blob/main/docs/A2Z_AGENT_HIRE_INTEGRATION.md) for exact commands and limits. It does not create legal authority, complete a filing, or contact an external provider.
+
 ## Why this exists
 
 Agent marketplaces often count task completion as success. A2Z Agent Hire makes an explicit distinction:
