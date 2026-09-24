@@ -81,6 +81,22 @@ class OpportunityTests(unittest.TestCase):
             store.refresh_lever("example", fetch_page=lambda *_: page("a", "a"))
         self.assertEqual(store.list(), [])
 
+    def test_search_is_transparent_and_requires_all_keywords(self):
+        store = self.db.opportunities
+        postings = [
+            {"id": "a", "text": "Platform Engineer", "categories": {"location": "Remote"}},
+            {"id": "b", "text": "Data Engineer", "categories": {"location": "Cairo"}},
+            {"id": "c", "text": "Platform Analyst", "categories": {"location": "Cairo"}},
+        ]
+        store.refresh_lever("example", fetch_page=lambda *_: postings)
+        result = store.search("platform engineer", "Remote")
+        self.assertEqual([item["external_id"] for item in result], ["a"])
+        self.assertEqual(result[0]["retrieval_score"], 6)
+        self.assertEqual(result[0]["match_reasons"], ["title:platform", "title:engineer"])
+        self.assertEqual(store.search("platform", "Cairo")[0]["external_id"], "c")
+        with self.assertRaises(ValueError):
+            store.search(" ".join("abcdefghi"))
+
 
 if __name__ == "__main__":
     unittest.main()

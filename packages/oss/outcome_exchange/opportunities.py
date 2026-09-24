@@ -120,6 +120,39 @@ class OpportunityStore:
         return [{**dict(row), "freshness": freshness(row["last_seen_at"], row["status"],
                                                    missing_count=row["missing_count"])} for row in rows]
 
+    def search(self, query: str = "", location: str = "") -> list[dict[str, Any]]:
+        """Transparent local text retrieval; scores are not hiring predictions."""
+        query, location = query.strip().casefold(), location.strip().casefold()
+        if len(query) > 120 or len(location) > 120:
+            raise ValueError("search terms are too long")
+        tokens = list(dict.fromkeys(query.split()))
+        if len(tokens) > 8:
+            raise ValueError("search supports at most eight distinct terms")
+        matches = []
+        for item in self.list():
+            title = item["title"].casefold()
+            org = item["organization"].casefold()
+            place = item["location"].casefold()
+            if location and location not in place:
+                continue
+            if any(token not in f"{title} {org} {place}" for token in tokens):
+                continue
+            reasons = []
+            score = 0
+            for token in tokens:
+                if token in title:
+                    score += 3
+                    reasons.append(f"title:{token}")
+                if token in org:
+                    score += 1
+                    reasons.append(f"organization:{token}")
+                if token in place:
+                    score += 1
+                    reasons.append(f"location:{token}")
+            matches.append({**item, "retrieval_score": score, "match_reasons": reasons})
+        return sorted(matches, key=lambda item: (-item["retrieval_score"], item["title"].casefold(),
+                                                 item["organization"].casefold(), item["id"]))
+
     def refresh_lever(self, site: str, *, region: str = "global", max_pages: int = 20,
                       fetch_page: Callable[[str, str, int, int], list[dict[str, Any]]] = fetch_lever_page) -> dict[str, Any]:
         site = validate_site(site)

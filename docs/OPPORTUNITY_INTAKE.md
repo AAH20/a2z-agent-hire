@@ -31,7 +31,7 @@ python3 -m apps.api.server --db /tmp/a2z-agent-hire.db --port 8787
 
 The two commands must use the same database path. `leverdemo` returned 11 postings in a live smoke test on September 24, 2026, but a public board may change. Use an employer's actual Lever board slug for other companies. For EU-hosted boards, use `--region eu`. Do not use this command as a high-frequency crawler. Source-specific rate limits and terms still apply.
 
-The local dashboard lists active opportunities, links to the source posting, and lets the operator mark `SAVED`, `APPLIED`, `INTERVIEW`, `OFFER`, or `CLOSED`, with an optional note and timezone-aware follow-up timestamp. These tracker values are manually entered. There is no automatic application submission, email sending, candidate identity, reminder scheduler, or private multi-user account. Anyone with local access to this unauthenticated loopback API can read and change the tracker.
+The local dashboard lists active opportunities, lets the operator search by keywords and location, links to the source posting, and lets the operator mark `SAVED`, `APPLIED`, `INTERVIEW`, `OFFER`, or `CLOSED`, with an optional note and timezone-aware follow-up timestamp. Search requires every keyword somewhere in title, organization, or location. Each title hit contributes three points; organization and location hits contribute one each. Match reasons and the integer text score are shown. This is deterministic retrieval, **not** a probability of interview, ability, or hiring success. Tracker values are manually entered. There is no automatic application submission, email sending, candidate identity, reminder scheduler, or private multi-user account. Anyone with local access to this unauthenticated loopback API can read and change the tracker.
 
 The output shape is documented in [`protocols/opportunity.schema.json`](../protocols/opportunity.schema.json). The current reference does not run a JSON Schema validator on responses.
 
@@ -59,6 +59,7 @@ stateDiagram-v2
 | Method | Path | Result |
 | --- | --- | --- |
 | GET | `/api/opportunities` | Active postings with freshness |
+| GET | `/api/opportunities?q=platform&location=Remote` | Active keyword matches with reasons and local text score |
 | GET | `/api/opportunities?status=CLOSED` | Closed postings |
 | GET | `/api/opportunities?status=ALL` | All postings |
 | GET | `/api/tracks` | Local manual application records |

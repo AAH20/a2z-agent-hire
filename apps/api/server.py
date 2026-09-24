@@ -54,8 +54,16 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/jobs":
                 self.send_json(200, {"jobs": self.db.jobs()})
             elif path == "/api/opportunities":
-                status = parse_qs(parsed.query).get("status", ["ACTIVE"])[0]
-                self.send_json(200, {"opportunities": self.db.opportunities.list(None if status == "ALL" else status)})
+                params = parse_qs(parsed.query)
+                status = params.get("status", ["ACTIVE"])[0]
+                query, location = params.get("q", [""])[0], params.get("location", [""])[0]
+                if query or location:
+                    if status != "ACTIVE":
+                        raise ValueError("search only supports active opportunities")
+                    self.send_json(200, {"opportunities": self.db.opportunities.search(query, location),
+                                         "retrieval_model": "LOCAL_DETERMINISTIC_TEXT_V1"})
+                else:
+                    self.send_json(200, {"opportunities": self.db.opportunities.list(None if status == "ALL" else status)})
             elif path == "/api/tracks":
                 self.send_json(200, {"tracks": self.db.opportunities.tracks()})
             elif path.startswith("/api/jobs/") and path.endswith("/economics"):

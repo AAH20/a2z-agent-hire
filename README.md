@@ -38,7 +38,7 @@ To import a public Lever employer board into the **same** database:
 .venv/bin/python -m apps.api.import_opportunities --db /tmp/a2z-agent-hire.db --site leverdemo --region global
 ```
 
-The dashboard then shows employer-hosted posting links, observation freshness, and a manual local application tracker. The importer uses a fixed public API host and does not submit applications. A posting observed in the API is not independently employer-verified. See [opportunity intake and its exact closure rules](docs/OPPORTUNITY_INTAKE.md).
+The dashboard then shows employer-hosted posting links, observation freshness, transparent keyword/location search, and a manual local application tracker. The importer uses a fixed public API host and does not submit applications. A posting observed in the API is not independently employer-verified. Search scores are text matches, not hiring predictions. See [opportunity intake and its exact closure rules](docs/OPPORTUNITY_INTAKE.md).
 
 Run checks:
 
