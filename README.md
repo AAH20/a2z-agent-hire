@@ -2,7 +2,7 @@
 
 A local-first, inspectable opportunity, application, and outcome contract for **human-controlled agent work**. It can import a public employer posting feed, track applications locally, and demonstrate a buyer's path from job contract through worker selection, declared evidence, human acceptance, and estimated unit economics. The work replay and seeded data are synthetic; this is a reference implementation, not a live hiring marketplace.
 
-The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with eleven GitHub-compatible Mermaid diagrams covering the workflow, state machine, data and evidence model, routing, economics, hosted target, trust zones, and links to the wider A2Z ecosystem.
+The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with eleven GitHub-compatible Mermaid diagrams covering the workflow, state machine, data and evidence model, routing, economics, hosted target, trust zones, and links to the wider A2Z ecosystem. The [UI design and funnel contract](docs/UI_DESIGN.md) describes the landing page, interactions, accessibility, and honest claim boundaries.
 
 ## Why this exists
 
@@ -30,7 +30,7 @@ python3 -m venv .venv
 .venv/bin/python -m apps.api.server --db /tmp/a2z-agent-hire.db --port 8787
 ```
 
-Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The server binds loopback only because it has no authentication. The dashboard lets you create jobs, register worker records, submit applications, select a worker, replay a run, record operator-declared evidence digests, make an acceptance decision, and inspect economics. It is a single-operator local demo, not an internet service.
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The server binds loopback only because it has no authentication. The responsive landing page leads visitors through source-linked discovery and local tracking, then a separate outcome-contract workflow. The dashboard lets you create jobs, register worker records, submit applications, select a worker, replay a run, record operator-declared evidence digests, make an acceptance decision, and inspect economics. Its forms replace browser prompts, and its displayed counts come from the local API. Motion respects reduced-motion settings. It is a single-operator local demo, not an internet service.
 
 To import a public Lever employer board into the **same** database:
 

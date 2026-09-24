@@ -1,151 +1,175 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>A2Z Agent Hire</title>
-  <style>
-    :root{color-scheme:dark}body{font:15px system-ui,sans-serif;background:#10151c;color:#e9eef5;margin:0}main{max-width:1180px;margin:auto;padding:28px}h1,h2,h3{margin:0 0 10px}.muted{color:#9eabb9}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}.card{background:#18212b;border:1px solid #2b3948;border-radius:12px;padding:18px;margin:14px 0}.pill{border-radius:999px;padding:3px 9px;background:#26394b;margin:2px;font-size:12px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}button{background:#50a9ff;color:#06111b;border:0;border-radius:7px;padding:9px 12px;font-weight:700;cursor:pointer}input,textarea,select{width:100%;box-sizing:border-box;background:#101820;color:#fff;border:1px solid #3a4a5b;border-radius:6px;padding:8px;margin:4px 0 10px}label{display:block;color:#b8c5d3;font-size:12px}pre{white-space:pre-wrap;background:#0b1016;padding:10px;border-radius:7px;overflow:auto}.metric{font-size:25px;font-weight:700}
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08131b">
+  <meta name="description" content="Discover source-linked opportunities and coordinate human-controlled, evidence-backed agent work. A local open-source reference from A2Z Agent Hire.">
+  <title>A2Z Agent Hire — Work, with a clear outcome</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/app.js" defer></script>
 </head>
-<body><main>
-  <h1>A2Z Agent Hire</h1>
-  <p class="muted">Local opportunity discovery, application tracking, and human-controlled agent work.</p>
-  <div id="summary" class="grid"></div>
-  <section><h2>Employer-source opportunities</h2><p class="muted">Import a public Lever board with the documented CLI. Source-observed means a posting appeared in that API; it is not employer identity verification.</p><form id="search-form" class="card row"><label>Keywords<input name="q" placeholder="e.g. platform engineer"></label><label>Location contains<input name="location" placeholder="e.g. Remote"></label><button>Search postings</button></form><div id="opportunities" class="grid"></div></section>
-  <section><h2>Local application tracker</h2><div id="tracks" class="grid"></div></section>
-  <section><h2>Jobs</h2><div id="jobs"></div></section>
-  <section><h2>Available workers</h2><div id="workers" class="grid"></div></section>
-  <section class="grid">
-    <div class="card"><h2>Publish a job</h2><form id="job-form">
-      <label>Title<input name="title" value="Evidence-backed cloud change review"></label>
-      <label>Objective<textarea name="objective">Produce a reviewable change decision with evidence and human acceptance.</textarea></label>
-      <label>Budget USD<input name="budget" type="number" value="75"></label>
-      <button>Publish</button>
-    </form></div>
-    <div class="card"><h2>Register a worker</h2><form id="worker-form">
-      <label>Name<input name="name" value="New evaluation worker"></label>
-      <label>Type<select name="type"><option>human</option><option>agent</option><option>swarm</option></select></label>
-      <label>Capabilities<input name="capabilities" value="evidence,acceptance"></label>
-      <button>Register</button>
-    </form></div>
-  </section>
-  <section><h2>Evolution candidates</h2><div id="evolution"></div></section>
-  <p class="muted">OSS reference boundary: replayed tasks and operator-declared evidence only; no autonomous employment decision, payments, hosted model, or customer data.</p>
-</main>
-<script>
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function localDateInput(iso){
-  if(!iso)return '';
-  const d=new Date(iso),pad=n=>String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-async function api(path,opts={}){
-  const response=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
-  const value=await response.json();
-  if(!response.ok)throw Error(value.error||'request failed');
-  return value;
-}
-function button(label,action,id,extra={}){
-  const attributes=Object.entries(extra).map(([key,value])=>` data-${key}="${esc(value)}"`).join('');
-  return `<button data-action="${action}" data-id="${esc(id)}"${attributes}>${label}</button>`;
-}
-function card(job){
-  const run=job.runs?.[0];
-  const applications=job.applications.map(app=>`<div class="row"><span>${esc(app.worker_name)} · ${esc(app.status)} · $${esc(app.bid_usd)}</span>${['PENDING','SHORTLISTED'].includes(app.status)?button('Select','select',app.id):''}</div>`).join('');
-  const actions=[button('Apply worker','apply',job.id)];
-  if(job.status==='IN_PROGRESS')actions.push(button('Route & replay','launch',job.id));
-  if(run&&job.status==='IN_REVIEW'){
-    actions.push(button('Record evidence digest','evidence',run.id));
-    actions.push(button('Human accept','accept',job.id,{decision:'ACCEPTED'}));
-    actions.push(button('Request correction','accept',job.id,{decision:'CORRECTION_REQUIRED'}));
-  }
-  const detail=run?`<pre>${esc(JSON.stringify({outcome:run.outcome,failures:run.failure_codes,route:run.route,recorded_evidence:run.observed_evidence,economics:job.economics},null,2))}</pre>`:'';
-  return `<div class="card"><div class="row"><h3>${esc(job.title)}</h3><span class="pill">${esc(job.status)}</span><span class="pill">${esc(job.evidence_class)}</span></div><p>${esc(job.objective)}</p><p class="muted">Budget $${esc(job.budget_usd)} · Price $${esc(job.customer_price_usd)} · ${job.applications.length} applications</p><div class="row">${actions.join('')}</div><h4>Applications</h4>${applications||'<p class="muted">No applications yet.</p>'}${detail}</div>`;
-}
-async function refresh(){
-  const search=new FormData(document.querySelector('#search-form'));
-  const query=new URLSearchParams();
-  if(String(search.get('q')||'').trim())query.set('q',String(search.get('q')).trim());
-  if(String(search.get('location')||'').trim())query.set('location',String(search.get('location')).trim());
-  const opportunityPath='/api/opportunities'+(query.size?('?'+query.toString()):'');
-  const [jobs,workers,evo,opportunities,tracks]=await Promise.all([api('/api/jobs'),api('/api/workers'),api('/api/evolution'),api(opportunityPath),api('/api/tracks')]);
-  document.querySelector('#jobs').innerHTML=jobs.jobs.map(card).join('');
-  const trackByOpportunity=new Map(tracks.tracks.map(item=>[item.opportunity_id,item]));
-  document.querySelector('#opportunities').innerHTML=opportunities.opportunities.map(item=>{
-    const current=trackByOpportunity.get(item.id);
-    const options=['SAVED','APPLIED','INTERVIEW','OFFER','CLOSED'].map(status=>`<option${current?.status===status?' selected':''}>${status}</option>`).join('');
-    const reasons=item.match_reasons?.length?`<p class="muted">Matched: ${esc(item.match_reasons.join(', '))} · text score ${esc(item.retrieval_score)}</p>`:'';
-    return `<div class="card"><h3>${esc(item.title)}</h3><p>${esc(item.organization)} · ${esc(item.location)}</p><p><span class="pill">${esc(item.freshness)}</span> <span class="pill">public provider API observed</span></p>${reasons}<p><a href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">Employer-hosted posting</a></p><form class="track-form" data-id="${esc(item.id)}"><label>Application status<select name="status">${options}</select></label><label>Local note<input name="note" maxlength="1000" value="${esc(current?.note||'')}"></label><label>Follow-up date and time<input name="follow_up_at" type="datetime-local" value="${esc(localDateInput(current?.follow_up_at))}"></label><button>Save local status</button></form></div>`;
-  }).join('')||'<p class="muted">No active opportunities imported. Run the Lever importer shown in the README.</p>';
-  document.querySelector('#tracks').innerHTML=tracks.tracks.map(item=>`<div class="card"><b>${esc(item.title)}</b><p>${esc(item.organization)} · <span class="pill">${esc(item.status)}</span> · source ${esc(item.opportunity_status)}</p><p>${esc(item.note)}</p><p class="muted">Follow up: ${esc(item.follow_up_at||'not set')}</p></div>`).join('')||'<p class="muted">No locally tracked applications.</p>';
-  document.querySelector('#workers').innerHTML=workers.workers.map(worker=>`<div class="card"><b>${esc(worker.name)}</b><p class="muted">${esc(worker.id)} · ${esc(worker.worker_type)}</p></div>`).join('');
-  document.querySelector('#summary').innerHTML=`<div class="card"><div class="metric">${opportunities.opportunities.length}</div><div class="muted">${query.size?'matching':'active source-observed'} opportunities</div></div><div class="card"><div class="metric">${jobs.jobs.length}</div><div class="muted">local jobs</div></div><div class="card"><div class="metric">${jobs.jobs.filter(job=>job.status==='ACCEPTED').length}</div><div class="muted">local accepted outcomes</div></div>`;
-  document.querySelector('#evolution').innerHTML=evo.candidates.map(candidate=>`<div class="card"><b>${esc(candidate.version)}</b> <span class="pill">${esc(candidate.status)}</span><pre>${esc(JSON.stringify(candidate.metrics,null,2))}</pre></div>`).join('');
-}
-async function act(button){
-  const {action,id,decision}=button.dataset;
-  if(action==='apply'){
-    const worker_id=prompt('Enter an available worker ID from the list below:');
-    if(!worker_id)return;
-    const proposal=prompt('Short work proposal:')||'';
-    const bid_usd=Number(prompt('Bid in USD:','28'));
-    await api(`/api/jobs/${encodeURIComponent(id)}/applications`,{method:'POST',body:JSON.stringify({worker_id,proposal,bid_usd})});
-  }else if(action==='select'){
-    const reviewer=prompt('Named human selector:');
-    if(!reviewer)return;
-    await api(`/api/applications/${encodeURIComponent(id)}/decision`,{method:'POST',body:JSON.stringify({status:'SELECTED',reviewer})});
-  }else if(action==='launch'){
-    await api(`/api/jobs/${encodeURIComponent(id)}/launch`,{method:'POST',body:'{}'});
-  }else if(action==='evidence'){
-    const criterion_id=prompt('Criterion ID, e.g. PLAN_DIGEST or SECURITY_EVIDENCE:');
-    if(!criterion_id)return;
-    const verifier=prompt('Named verifier (different from selected worker ID):');
-    if(!verifier)return;
-    const artifact_sha256=prompt('Lowercase SHA-256 digest of the reviewed artifact:');
-    if(!artifact_sha256)return;
-    await api(`/api/runs/${encodeURIComponent(id)}/evidence`,{method:'POST',body:JSON.stringify({criterion_id,verifier,artifact_sha256})});
-  }else if(action==='accept'){
-    const reviewer=prompt('Named human acceptance reviewer:');
-    if(!reviewer)return;
-    await api(`/api/jobs/${encodeURIComponent(id)}/acceptance`,{method:'POST',body:JSON.stringify({decision,reviewer})});
-  }
-  await refresh();
-}
-document.querySelector('#jobs').addEventListener('click',event=>{
-  const target=event.target.closest('button[data-action]');
-  if(target)act(target).catch(error=>alert(error.message));
-});
-document.querySelector('#search-form').addEventListener('submit',event=>{
-  event.preventDefault();
-  refresh().catch(error=>alert(error.message));
-});
-document.querySelector('#opportunities').addEventListener('submit',async event=>{
-  const form=event.target.closest('form.track-form');
-  if(!form)return;
-  event.preventDefault();
-  const values=new FormData(form);
-  try{
-    const localTime=String(values.get('follow_up_at')||'');
-    const follow_up_at=localTime?new Date(localTime).toISOString():null;
-    await api(`/api/opportunities/${encodeURIComponent(form.dataset.id)}/track`,{method:'POST',body:JSON.stringify({status:values.get('status'),note:values.get('note'),follow_up_at})});
-    await refresh();
-  }catch(error){alert(error.message)}
-});
-document.querySelector('#job-form').addEventListener('submit',async event=>{
-  event.preventDefault();
-  const form=new FormData(event.target);
-  try{
-    await api('/api/jobs',{method:'POST',body:JSON.stringify({title:form.get('title'),objective:form.get('objective'),budget_usd:Number(form.get('budget')),customer_price_usd:Number(form.get('budget')),acceptance_criteria:[{id:'PLAN_DIGEST',description:'Exact plan version recorded',required:true},{id:'SECURITY_EVIDENCE',description:'Security checks attached',required:true},{id:'HUMAN_ACCEPTANCE',description:'Accountable human accepts result',required:true}],worker_policy:{allowed_worker_types:['human','agent','swarm'],requires_independent_verifier:true},evidence_class:'SYNTHETIC'})});
-    event.target.reset();await refresh();
-  }catch(error){alert(error.message)}
-});
-document.querySelector('#worker-form').addEventListener('submit',async event=>{
-  event.preventDefault();
-  const form=new FormData(event.target);
-  try{
-    await api('/api/workers',{method:'POST',body:JSON.stringify({name:form.get('name'),worker_type:form.get('type'),capabilities:String(form.get('capabilities')).split(',').map(item=>item.trim()).filter(Boolean)})});
-    event.target.reset();await refresh();
-  }catch(error){alert(error.message)}
-});
-refresh().catch(error=>alert(error.message));
-</script></body></html>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="shell nav-shell">
+      <a class="brand" href="#top" aria-label="A2Z Agent Hire home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>A2Z <b>Agent Hire</b></span>
+      </a>
+      <nav class="desktop-nav" aria-label="Primary">
+        <a href="#discover">Discover</a>
+        <a href="#work">Work contracts</a>
+        <a href="#how-it-works">How it works</a>
+      </nav>
+      <a class="nav-cta" href="#studio">Open the studio <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="status-dot"></span> LOCAL OSS REFERENCE · HUMAN IN CONTROL</div>
+        <h1 id="hero-title">Work starts with a role.<br><em>Value starts with an outcome.</em></h1>
+        <p class="hero-lede">Discover opportunities at their source. Coordinate human and agent workers around a clear contract. Review the result before anyone calls it done.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#discover">Explore opportunities <span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary" href="#studio">Publish a work contract <span aria-hidden="true">→</span></a>
+        </div>
+        <p class="hero-footnote">No autonomous hiring or payment. The work replay and seeded data are synthetic.</p>
+      </div>
+      <div class="hero-visual" aria-label="Illustration of the outcome workflow">
+        <div class="visual-grid" aria-hidden="true"></div>
+        <div class="visual-orbit orbit-one" aria-hidden="true"></div>
+        <div class="visual-orbit orbit-two" aria-hidden="true"></div>
+        <div class="visual-core">
+          <div class="visual-core-icon" aria-hidden="true">↗</div>
+          <span>Outcome</span>
+          <strong>Accepted by a person</strong>
+          <small>Evidence remains reviewable</small>
+        </div>
+        <div class="floating-node node-source"><span class="node-icon">01</span><span><small>Discover</small><b>Source-linked role</b></span></div>
+        <div class="floating-node node-select"><span class="node-icon">02</span><span><small>Decide</small><b>Human selection</b></span></div>
+        <div class="floating-node node-evidence"><span class="node-icon">03</span><span><small>Verify</small><b>Evidence check</b></span></div>
+        <div class="visual-caption">A visible path from discovery to decision.</div>
+      </div>
+    </section>
+
+    <section class="snapshot-wrap" aria-label="Current local reference activity">
+      <div class="shell">
+        <div class="snapshot-heading"><span>LOCAL SYSTEM PULSE</span><span id="health-label">Connecting to reference API…</span></div>
+        <div id="summary" class="snapshot-grid" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="section shell" id="how-it-works" aria-labelledby="journeys-title">
+      <div class="section-heading reveal">
+        <div><div class="kicker">TWO PATHS · ONE CLEAR STANDARD</div><h2 id="journeys-title">Choose your side of the work.</h2></div>
+        <p>Each path is short enough to understand and explicit about where a person makes the decision.</p>
+      </div>
+      <div class="journey-grid">
+        <article class="journey-card journey-talent reveal">
+          <div class="journey-top"><span class="journey-icon" aria-hidden="true">↗</span><span class="tiny-label">FOR TALENT</span></div>
+          <h3>Find a role worth pursuing.</h3>
+          <p>Search source-observed openings, inspect the employer-hosted page, and keep a local record of your next step.</p>
+          <ol><li><span>01</span> Find the opportunity</li><li><span>02</span> Check its source</li><li><span>03</span> Track your application</li></ol>
+          <a class="text-link" href="#discover">Go to opportunity search <span aria-hidden="true">↗</span></a>
+        </article>
+        <article class="journey-card journey-buyer reveal">
+          <div class="journey-top"><span class="journey-icon" aria-hidden="true">◇</span><span class="tiny-label">FOR WORK OWNERS</span></div>
+          <h3>Define success before the work begins.</h3>
+          <p>Publish an outcome contract, select a worker, record declared evidence, and make an accountable acceptance decision.</p>
+          <ol><li><span>01</span> State the criteria</li><li><span>02</span> Select a worker</li><li><span>03</span> Review the outcome</li></ol>
+          <a class="text-link" href="#work">Explore work contracts <span aria-hidden="true">↗</span></a>
+        </article>
+      </div>
+    </section>
+
+    <section class="section section-discover" id="discover" aria-labelledby="discover-title">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div><div class="kicker">DISCOVER / 01</div><h2 id="discover-title">Openings with a path back to the source.</h2></div>
+          <p>Search public provider-observed postings. The source link stays visible; a posting is never labeled employer-verified here.</p>
+        </div>
+        <form id="search-form" class="search-panel reveal" role="search">
+          <label class="search-field"><span>WHAT</span><input name="q" autocomplete="off" maxlength="120" placeholder="Role, team, or keyword"></label>
+          <label class="search-field"><span>WHERE</span><input name="location" autocomplete="off" maxlength="120" placeholder="Location contains…"></label>
+          <button class="button button-primary search-button" type="submit">Search <span aria-hidden="true">↗</span></button>
+          <button class="search-clear" id="clear-search" type="button">Clear</button>
+        </form>
+        <div class="list-heading"><span id="opportunity-count">Loading opportunities…</span><span class="list-meta">PUBLIC PROVIDER API OBSERVED</span></div>
+        <div id="opportunities" class="opportunity-grid" aria-live="polite"></div>
+        <details class="import-help">
+          <summary>How do I add an employer board?</summary>
+          <p>Run the importer in a terminal with the same database path used to start this server. Replace the site slug with an employer's public Lever board.</p>
+          <code>python3 -m apps.api.import_opportunities --db YOUR_DB_PATH --site leverdemo</code>
+          <p>No automatic applications are sent. The complete setup is in the repository README.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="section shell" id="tracker" aria-labelledby="tracker-title">
+      <div class="section-heading reveal">
+        <div><div class="kicker">STAY ON TRACK / 02</div><h2 id="tracker-title">Your next step, in one place.</h2></div>
+        <p>Application states and follow-up dates are entered manually and stored in the local reference database.</p>
+      </div>
+      <div id="tracks" class="track-grid" aria-live="polite"></div>
+    </section>
+
+    <section class="section section-work" id="work" aria-labelledby="work-title">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div><div class="kicker">OUTCOME CONTRACTS / 03</div><h2 id="work-title">Make the decision trail visible.</h2></div>
+          <p>A named human selects a worker. Replay starts unresolved. Required evidence and a named acceptance decision close the loop.</p>
+        </div>
+        <div id="jobs" class="job-list" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="section shell" id="studio" aria-labelledby="studio-title">
+      <div class="section-heading reveal">
+        <div><div class="kicker">LOCAL WORKSPACE / 04</div><h2 id="studio-title">Build the next contract.</h2></div>
+        <p>Use the local reference to explore the full workflow. These forms create records only in your local SQLite database.</p>
+      </div>
+      <div class="studio-grid">
+        <article class="studio-card reveal">
+          <div class="studio-card-head"><span class="studio-index">01 / CONTRACT</span><h3>Publish a job</h3><p>Start with an objective and budget. This demo applies a fixed three-criterion evidence template.</p></div>
+          <form id="job-form" class="stack-form">
+            <p class="form-note">Required template: PLAN_DIGEST, SECURITY_EVIDENCE, and named HUMAN_ACCEPTANCE.</p>
+            <label>Job title<input name="title" required maxlength="180" value="Evidence-backed cloud change review"></label>
+            <label>Objective<textarea name="objective" required rows="3">Produce a reviewable change decision with evidence and human acceptance.</textarea></label>
+            <label>Customer price and budget (USD)<input name="budget" type="number" min="0" step="0.01" required value="75"></label>
+            <fieldset class="checkbox-field"><legend>Allowed worker types</legend><label><input type="checkbox" name="worker_type" value="human" checked> Human</label><label><input type="checkbox" name="worker_type" value="agent" checked> Agent</label><label><input type="checkbox" name="worker_type" value="swarm" checked> Swarm</label></fieldset>
+            <button class="button button-primary" type="submit">Publish local contract <span aria-hidden="true">↗</span></button>
+          </form>
+        </article>
+        <article class="studio-card reveal">
+          <div class="studio-card-head"><span class="studio-index">02 / CAPACITY</span><h3>Register a worker</h3><p>Add a local human, agent, or swarm record. Registration is not identity or capability verification.</p></div>
+          <form id="worker-form" class="stack-form">
+            <label>Display name<input name="name" required maxlength="180" value="New evaluation worker"></label>
+            <label>Worker type<select name="type"><option value="human">Human</option><option value="agent">Agent</option><option value="swarm">Swarm</option></select></label>
+            <label>Capabilities, comma-separated<input name="capabilities" value="evidence,acceptance"></label>
+            <button class="button button-secondary" type="submit">Register locally <span aria-hidden="true">→</span></button>
+          </form>
+        </article>
+      </div>
+      <div class="roster-panel">
+        <div class="roster-head"><h3>Available worker records</h3><span class="tiny-label">UNVERIFIED LOCAL RECORDS</span></div>
+        <div id="workers" class="worker-grid"></div>
+      </div>
+    </section>
+
+    <section class="section shell" id="reference" aria-labelledby="reference-title">
+      <div class="reference-panel reveal">
+        <div><div class="kicker">THE REFERENCE BOUNDARY</div><h2 id="reference-title">A clear demo should make its limits clear, too.</h2><p>The router is a typed heuristic, the swarm is a replay, and evidence digests are operator-declared. There is no hosted model, autonomous employment decision, payment, authenticated reviewer, or real customer outcome in this reference.</p></div>
+        <div><h3>Evolution candidates</h3><div id="evolution"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner"><span class="brand footer-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>A2Z <b>Agent Hire</b></span></span><p>Source-linked opportunities. Human-controlled outcomes. Local OSS reference.</p><a href="#top">Back to top ↑</a></div>
+  </footer>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

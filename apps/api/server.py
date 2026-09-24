@@ -13,6 +13,10 @@ from packages.oss.outcome_exchange.core import ExchangeDB
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "apps" / "web" / "index.html"
+ASSETS = {
+    "/assets/app.css": (ROOT / "apps" / "web" / "app.css", "text/css; charset=utf-8"),
+    "/assets/app.js": (ROOT / "apps" / "web" / "app.js", "text/javascript; charset=utf-8"),
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -46,6 +50,15 @@ class Handler(BaseHTTPRequestHandler):
                 body = WEB.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif path in ASSETS:
+                asset, content_type = ASSETS[path]
+                body = asset.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "no-store")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
